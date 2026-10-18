@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'src/api/api_client.dart';
 import 'src/api/pos_api.dart';
@@ -29,6 +30,9 @@ class PosApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'MNSCloud POS',
         debugShowCheckedModeBanner: false,
+        // Material widgets (text fields, dialogs) need their own strings for every supported
+        // locale; without the delegates a pt/es browser renders them as grey error boxes.
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         supportedLocales: const [Locale('pt', 'BR'), Locale('en', 'US'), Locale('es', 'ES')],
         theme: ThemeData(colorSchemeSeed: const Color(0xFF1565C0), useMaterial3: true),
         darkTheme: ThemeData(colorSchemeSeed: const Color(0xFF1565C0), useMaterial3: true, brightness: Brightness.dark),
