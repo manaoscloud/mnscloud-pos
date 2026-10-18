@@ -13,5 +13,8 @@ This repository must not include:
 - Private API hosts, internal network addresses or payment provider account details.
 - Client-side logic that would bypass the MNSCloud API decisions.
 
-The web client keeps the session and the cart in memory only. Installed apps may store only the
-session and offline data issued by the API, encrypted at rest; sensitive decisions stay server-side.
+The web client keeps the session and the cart in memory only. Installed apps keep the device
+private key in the OS secure storage (Keychain, Android Keystore, Windows DPAPI, libsecret) and the
+catalog, cash events and sales (no card data beyond brand and last four digits) in a local SQLite
+store; every sync request is signed by the device and counter-checked by the API, and price,
+stock, limit and fiscal decisions stay server-side.

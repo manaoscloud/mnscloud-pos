@@ -33,6 +33,12 @@ class PosHome extends StatelessWidget {
             body: SafeArea(
               child: Column(children: [
                 if (controller.error != null) ErrorBanner(controller: controller),
+                if (controller.syncMessage != null)
+                  MaterialBanner(
+                    leading: const Icon(Icons.sync_problem),
+                    content: Text(controller.syncMessage!),
+                    actions: [TextButton(onPressed: controller.syncNow, child: Text(S.of(context).t('syncNow')))],
+                  ),
                 Expanded(child: body),
               ]),
             ),
@@ -76,6 +82,26 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ]),
       actions: [
+        if (controller.deviceMode) ...[
+          Tooltip(
+            message: s.t('deviceModeHint'),
+            child: Chip(
+              avatar: Icon(Icons.phone_android, size: 18, color: scheme.primary),
+              label: Text(controller.device!.pendingOperations == 0
+                  ? s.t('deviceSynced')
+                  : '${controller.device!.pendingOperations} ${s.t('devicePending')}'),
+            ),
+          ),
+          if (controller.device!.problemCount > 0)
+            Tooltip(
+              message: s.t('deviceProblemsHint'),
+              child: Chip(
+                avatar: Icon(Icons.report_problem, size: 18, color: scheme.error),
+                label: Text('${controller.device!.problemCount}'),
+              ),
+            ),
+          IconButton(tooltip: s.t('syncNow'), icon: const Icon(Icons.sync), onPressed: controller.syncNow),
+        ],
         Tooltip(
           message: online ? s.t('online') : s.t('unreachable'),
           child: Padding(
@@ -240,9 +266,17 @@ class OpenSessionView extends StatefulWidget {
 
 class _OpenSessionViewState extends State<OpenSessionView> {
   final _amount = TextEditingController(text: '0,00');
+  final _deviceName = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceName.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
+    _deviceName.dispose();
     _amount.dispose();
     super.dispose();
   }
@@ -264,6 +298,26 @@ class _OpenSessionViewState extends State<OpenSessionView> {
           label: Text(s.t('openSession')),
         ),
         TextButton(onPressed: widget.controller.backToTerminals, child: Text(s.t('switchTerminal'))),
+        if (widget.controller.canProvisionDevice) ...[
+          const Divider(height: 32),
+          Text(s.t('provisionTitle'), style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(s.t('provisionHint'), style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 8),
+          TextField(controller: _deviceName, decoration: InputDecoration(labelText: s.t('deviceName'))),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.offline_bolt),
+            onPressed: widget.controller.busy || _deviceName.text.trim().isEmpty
+                ? null
+                : () => widget.controller.provisionDevice(_deviceName.text.trim()),
+            label: Text(s.t('provision')),
+          ),
+        ],
+        if (widget.controller.deviceMode) ...[
+          const SizedBox(height: 8),
+          Text(s.t('deviceModeHint'), style: Theme.of(context).textTheme.bodySmall),
+        ],
       ]),
     );
   }
@@ -597,17 +651,24 @@ class _PaymentDialogState extends State<PaymentDialog> {
   final _nsu = TextEditingController();
   final _auth = TextEditingController();
 
+  /// Pix needs the tenant gateway online, so installed devices (local-first) take cash and cards.
+  List<String> get _accepted {
+    final all = widget.controller.terminal?.paymentMethods ?? const ['cash'];
+    final usable = widget.controller.deviceMode ? all.where((m) => m != 'pix').toList() : all;
+    return usable.isEmpty ? const ['cash'] : usable;
+  }
+
   @override
   void initState() {
     super.initState();
-    final accepted = widget.controller.terminal?.paymentMethods ?? const ['cash'];
+    final accepted = _accepted;
     _method = PaymentMethodCode.fromCode(accepted.first);
   }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final accepted = widget.controller.terminal?.paymentMethods ?? const ['cash'];
+    final accepted = _accepted;
     final card = _method == PaymentMethod.cardCredit || _method == PaymentMethod.cardDebit;
     return AlertDialog(
       title: Text(s.t('pay')),
@@ -708,8 +769,9 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final confirmed = _sale.paymentState == 'confirmed';
+    final onDevice = _sale.syncState == 'pending';
     return AlertDialog(
-      title: Text('${s.t('saleSaved')} · ${s.t('saleNumber')} ${_sale.number}'),
+      title: Text(onDevice ? s.t('saleSavedOnDevice') : '${s.t('saleSaved')} · ${s.t('saleNumber')} ${_sale.number}'),
       content: SizedBox(
         width: 440,
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -739,6 +801,8 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
                 ),
               Text(s.t('pixHint'), style: Theme.of(context).textTheme.bodySmall),
             ],
+          if (onDevice)
+            Chip(avatar: const Icon(Icons.sync, size: 18), label: Text(s.t('waitingSync'))),
           const SizedBox(height: 12),
           Text(s.t('noFiscal'), style: Theme.of(context).textTheme.bodySmall),
         ]),
