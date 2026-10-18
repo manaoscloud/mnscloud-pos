@@ -17,6 +17,10 @@ macOS, Linux) that will also sell offline within a server-issued authorization.
   (`scripts/check-web-online-only.sh`).
 - Pix is confirmed only by the gateway on the server; cards only with the terminal NSU. Store no card
   data beyond brand and last four digits.
+- Installed apps are local-first (`lib/src/offline/`): a sale or cash event and its sync operation
+  are written in one SQLite transaction; operations are pushed in order with the device signature
+  (`p256.dart`, identical message to the API `helpers/deviceSignature.ts`) and a counter persisted
+  before each request. Never resolve a conflict by deleting a local sale.
 
 ## Development
 

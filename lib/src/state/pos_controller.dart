@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -5,17 +8,38 @@ import '../api/pos_api.dart';
 import '../core/ids.dart';
 import '../core/models.dart';
 import '../core/money.dart';
+import '../offline/device_host.dart';
+import '../offline/device_runtime.dart';
+import '../offline/device_sync_api.dart' as device_api;
+import '../offline/p256.dart';
+import '../offline/sync_engine.dart';
+import '../version/app_build_info.dart';
 
 enum ConnectionStatus { online, unreachable, unknown }
 
 enum PosStage { signIn, tenant, terminal, openSession, selling }
 
 /// Single source of truth of the POS screen state. On the web nothing is persisted locally: the
-/// cart lives in memory and only a server confirmation shows a sale as saved.
+/// cart lives in memory and only a server confirmation shows a sale as saved. An installed app
+/// whose terminal is provisioned on this device works local-first ([DeviceRuntime]): sales and
+/// cash events are stored on the device and synchronized, online or offline.
 class PosController extends ChangeNotifier {
-  PosController(this.api);
+  PosController(this.api, {this.host});
 
   final PosApi api;
+
+  /// Local store and secure storage of installed apps (null on the web).
+  final DeviceHost? host;
+
+  /// Local-first runtime of the provisioned terminal (null = online mode).
+  DeviceRuntime? device;
+  Timer? _syncTimer;
+  String? syncMessage;
+
+  bool get deviceMode => device != null;
+
+  /// The installed app may provision this terminal for offline operation.
+  bool get canProvisionDevice => host != null && device == null && terminal?.offlineEnabled == true;
 
   PosStage stage = PosStage.signIn;
   ConnectionStatus connection = ConnectionStatus.unknown;
@@ -110,6 +134,13 @@ class PosController extends ChangeNotifier {
     final fresh = await _run(() => api.terminal(value.uuid));
     if (fresh == null) return;
     terminal = fresh;
+    if (await _attachDevice(fresh)) {
+      session = device!.localSession();
+      stage = session == null ? PosStage.openSession : PosStage.selling;
+      notifyListeners();
+      unawaited(syncNow());
+      return;
+    }
     if (fresh.openSessionUuid != null) {
       session = await _run(() => api.session(fresh.openSessionUuid!));
       stage = session?.isOpen == true ? PosStage.selling : PosStage.openSession;
@@ -121,6 +152,7 @@ class PosController extends ChangeNotifier {
 
   void backToTerminals() {
     if (saleInDoubt) return;
+    _detachDevice();
     terminal = null;
     session = null;
     stage = PosStage.terminal;
@@ -130,6 +162,13 @@ class PosController extends ChangeNotifier {
   Future<void> openSession(Decimal openingAmount) async {
     final t = terminal;
     if (t == null) return;
+    if (deviceMode) {
+      _local(() {
+        session = device!.openSession(user!.uuid, openingAmount);
+        stage = PosStage.selling;
+      });
+      return;
+    }
     final key = 'open:${uuidV4()}';
     final opened = await _run(() => api.openSession(t.uuid, openingAmount.toString(), key));
     if (opened == null) return;
@@ -141,6 +180,11 @@ class PosController extends ChangeNotifier {
   Future<void> refreshSession() async {
     final s = session;
     if (s == null) return;
+    if (deviceMode) {
+      session = device!.localSession();
+      notifyListeners();
+      return;
+    }
     final fresh = await _run(() => api.session(s.uuid));
     if (fresh != null) session = fresh;
     notifyListeners();
@@ -149,6 +193,10 @@ class PosController extends ChangeNotifier {
   Future<void> cashMovement(String kind, Decimal amount, String? notes) async {
     final s = session;
     if (s == null) return;
+    if (deviceMode) {
+      _local(() => session = device!.cashMovement(user!.uuid, s.uuid, kind, amount, notes));
+      return;
+    }
     final key = '$kind:${uuidV4()}';
     final fresh = await _run(() => api.cashMovement(s.uuid, kind, amount.toString(), notes, key));
     if (fresh != null) session = fresh;
@@ -158,6 +206,15 @@ class PosController extends ChangeNotifier {
   Future<bool> closeSession(Decimal counted, String? notes) async {
     final s = session;
     if (s == null) return false;
+    if (deviceMode) {
+      final ok = _local(() => device!.closeSession(user!.uuid, s.uuid, counted, notes));
+      if (!ok) return false;
+      session = null;
+      stage = PosStage.openSession;
+      clearSale();
+      notifyListeners();
+      return true;
+    }
     final closed = await _run(() => api.closeSession(s.uuid, counted.toString(), notes));
     if (closed == null) return false;
     session = closed;
@@ -170,6 +227,7 @@ class PosController extends ChangeNotifier {
   Future<List<CatalogItem>> search(String text) async {
     final t = terminal;
     if (t == null || text.trim().isEmpty) return const [];
+    if (deviceMode) return device!.search(text);
     return await _run(() => api.catalog(t.uuid, search: text.trim())) ?? const [];
   }
 
@@ -177,6 +235,16 @@ class PosController extends ChangeNotifier {
   Future<bool> scan(String code) async {
     final t = terminal;
     if (t == null || code.trim().isEmpty) return false;
+    if (deviceMode) {
+      final local = device!.scan(code);
+      if (local == null) {
+        error = 'No item uses this code.';
+        notifyListeners();
+        return false;
+      }
+      addItem(local.item, local.quantity);
+      return true;
+    }
     final found = await _run(() => api.catalog(t.uuid, barcode: code.trim(), limit: 1));
     if (found == null || found.isEmpty) {
       error ??= 'No item uses this code.';
@@ -271,6 +339,7 @@ class PosController extends ChangeNotifier {
   /// cart is kept with the same sale identity so a retry can never create a second sale.
   Future<PosSaleResult?> finish() async {
     if (!canFinish || terminal == null || session == null) return null;
+    if (deviceMode) return _finishOnDevice();
     pendingSale ??= _buildPayload();
     final outcome = await _run(() => api.submitSale(pendingSale!));
     if (outcome == null) {
@@ -337,5 +406,128 @@ class PosController extends ChangeNotifier {
   void dismissError() {
     error = null;
     notifyListeners();
+  }
+
+  // ---------- Installed device (local-first)
+
+  /// Runs a local write; a storage failure (disk full, I/O) shows an error and nothing as saved.
+  bool _local(void Function() work) {
+    error = null;
+    try {
+      work();
+      notifyListeners();
+      unawaited(syncNow());
+      return true;
+    } on OfflineLimitException catch (e) {
+      error = e.message;
+    } catch (e) {
+      error = 'This device could not store the operation ($e). Nothing was saved.';
+    }
+    notifyListeners();
+    return false;
+  }
+
+  PosSaleResult? _finishOnDevice() {
+    final base = _buildPayload()..remove('origin');
+    final totalNow = total;
+    final changeNow = change;
+    final cashNet = cashPaid - changeNow;
+    Map<String, dynamic>? stored;
+    final ok = _local(() => stored = device!.recordSale(user!.uuid, base, totalNow, cashNet, cart));
+    if (!ok || stored == null) return null;
+    lastSale = PosSaleResult(
+      uuid: stored!['saleUUID'] as String,
+      number: '',
+      total: totalNow,
+      change: changeNow,
+      commercialState: 'confirmed',
+      paymentState: payments.every((p) => p.declaredState == 'confirmed' || p.declaredState == 'authorized')
+          ? 'confirmed'
+          : 'pending',
+      fiscalState: 'none',
+      syncState: 'pending',
+      payments: [for (final p in payments) p.toJson()],
+    );
+    clearSale();
+    session = device!.localSession();
+    notifyListeners();
+    return lastSale;
+  }
+
+  /// Attaches the local runtime when this installation is provisioned for [t].
+  Future<bool> _attachDevice(PosTerminal t) async {
+    final h = host;
+    if (h == null || !t.offlineEnabled) return false;
+    final raw = h.store.meta('device');
+    if (raw == null) return false;
+    final row = (jsonDecode(raw) as Map).cast<String, dynamic>();
+    if (normalizeUuid(row['PosTerminalPtmUUID'].toString()) != t.uuid) return false;
+    final key = await h.loadKey();
+    if (key == null) return false;
+    _startDevice(h, key, normalizeUuid(row['SdvUUID'].toString()), t.uuid);
+    return true;
+  }
+
+  void _startDevice(DeviceHost h, P256Key key, String deviceUuid, String terminalUuid) {
+    final transport = device_api.DeviceSyncApi(api.client, h.store, key, deviceUuid, appVersion: appBuildInfo.version);
+    device = DeviceRuntime(
+      store: h.store,
+      engine: SyncEngine(h.store, transport),
+      deviceUuid: deviceUuid,
+      terminalUuid: terminalUuid,
+    );
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) => syncNow());
+  }
+
+  void _detachDevice() {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    device = null;
+  }
+
+  /// Provisions this installation for the selected terminal (online, by an authorized user).
+  Future<bool> provisionDevice(String name) async {
+    final h = host;
+    final t = terminal;
+    if (h == null || t == null) return false;
+    final key = P256Key.generate();
+    final row = await _run(() => device_api.provisionDevice(api.client,
+        key: key, terminalUuid: t.uuid, name: name, platform: h.platform, appVersion: appBuildInfo.version));
+    if (row == null) return false;
+    await h.saveKey(key);
+    h.store.setMeta('device', jsonEncode(row));
+    _startDevice(h, key, normalizeUuid(row['SdvUUID'].toString()), t.uuid);
+    session = device!.localSession();
+    stage = session == null ? PosStage.openSession : PosStage.selling;
+    notifyListeners();
+    await syncNow();
+    return true;
+  }
+
+  /// Pushes pending operations and refreshes the catalog; failures leave everything stored.
+  Future<void> syncNow() async {
+    final d = device;
+    if (d == null) return;
+    try {
+      final report = await d.engine.sync();
+      connection = report.reachable ? ConnectionStatus.online : ConnectionStatus.unreachable;
+      syncMessage = null;
+    } on ApiException catch (e) {
+      if (e.code == 'DEVICE_SUSPENDED' || e.code == 'DEVICE_REVOKED') {
+        syncMessage = 'This device was blocked by the server (${e.code}). Ask the manager to provision it again.';
+      } else {
+        syncMessage = e.message;
+      }
+    } catch (e) {
+      syncMessage = e.toString();
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 }

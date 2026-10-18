@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The POS talks to the MNSCloud API (sync and online sales). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="mnscloud_pos"
         android:name="${applicationName}"

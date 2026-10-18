@@ -14,6 +14,29 @@ class S {
 
   static const Map<String, Map<String, String>> _strings = {
     'app': {'pt': 'PDV', 'en': 'POS', 'es': 'TPV'},
+    'deviceModeHint': {
+      'pt': 'Este dispositivo vende mesmo sem internet: vendas e caixa ficam salvos aqui e são sincronizados.',
+      'en': 'This device sells even without internet: sales and cash are stored here and synchronized.',
+      'es': 'Este dispositivo vende incluso sin internet: ventas y caja se guardan aquí y se sincronizan.',
+    },
+    'deviceSynced': {'pt': 'Sincronizado', 'en': 'Synced', 'es': 'Sincronizado'},
+    'devicePending': {'pt': 'a sincronizar', 'en': 'to sync', 'es': 'por sincronizar'},
+    'deviceProblemsHint': {
+      'pt': 'Operações recusadas ou com pendência no servidor: o gestor revisa em PDV › Sincronização.',
+      'en': 'Operations refused or flagged by the server: the manager reviews them in POS › Sync.',
+      'es': 'Operaciones rechazadas o con pendiente en el servidor: el gerente las revisa en TPV › Sincronización.',
+    },
+    'syncNow': {'pt': 'Sincronizar agora', 'en': 'Sync now', 'es': 'Sincronizar ahora'},
+    'provisionTitle': {'pt': 'Operação offline', 'en': 'Offline operation', 'es': 'Operación offline'},
+    'provisionHint': {
+      'pt': 'Ativa este aparelho para vender sem internet neste caixa. O gestor define a autorização offline no MNSCloud.',
+      'en': 'Enables this device to sell without internet on this register. The manager sets the offline authorization in MNSCloud.',
+      'es': 'Habilita este equipo para vender sin internet en esta caja. El gerente define la autorización offline en MNSCloud.',
+    },
+    'deviceName': {'pt': 'Nome do aparelho', 'en': 'Device name', 'es': 'Nombre del equipo'},
+    'provision': {'pt': 'Ativar neste aparelho', 'en': 'Enable on this device', 'es': 'Habilitar en este equipo'},
+    'saleSavedOnDevice': {'pt': 'Venda salva neste aparelho', 'en': 'Sale saved on this device', 'es': 'Venta guardada en este equipo'},
+    'waitingSync': {'pt': 'Aguardando sincronização', 'en': 'Waiting for sync', 'es': 'Esperando sincronización'},
     'signIn': {'pt': 'Entrar', 'en': 'Sign in', 'es': 'Ingresar'},
     'email': {'pt': 'E-mail', 'en': 'E-mail', 'es': 'Correo'},
     'password': {'pt': 'Senha', 'en': 'Password', 'es': 'Contraseña'},

@@ -84,6 +84,23 @@ class ApiClient {
         body: jsonEncode(body ?? const {}),
       ));
 
+  /// Request with extra headers built from the exact URI and body text (device signatures).
+  Future<dynamic> signed(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    required Map<String, String> Function(Uri uri, String bodyText) headers,
+  }) {
+    final uri = _uri(path, query);
+    final text = body == null ? '' : jsonEncode(body);
+    final base = _headers(write: body != null);
+    final all = {...base, ...headers(uri, text)};
+    return _send(() => method == 'GET'
+        ? _http.get(uri, headers: all)
+        : _http.post(uri, headers: all, body: text));
+  }
+
   Future<dynamic> put(String path, Object? body) => _send(
       () => _http.put(_uri(path), headers: _headers(write: true), body: jsonEncode(body ?? const {})));
 
