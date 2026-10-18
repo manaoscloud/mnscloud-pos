@@ -157,6 +157,45 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ends the operator session on this screen: the server revokes the token (and the web cookie),
+  /// and everything kept in memory (user, tenant, register, cart) is dropped. The cash session
+  /// stays open on the server for the next operator. Refused while a sale submit is in doubt, so
+  /// a sale is never lost. Local state is cleared even when the server cannot be reached.
+  Future<bool> signOut() async {
+    if (saleInDoubt) {
+      error = 'A sale is still being confirmed. Wait for it before signing out.';
+      notifyListeners();
+      return false;
+    }
+    busy = true;
+    notifyListeners();
+    String? failure;
+    try {
+      await api.signOut();
+    } on ApiException catch (e) {
+      // An expired session is already signed out on the server.
+      if (e.kind != ApiFailureKind.unauthorized) failure = e.message;
+    }
+    _detachDevice();
+    api.client.bearerToken = null;
+    api.client.environmentUuid = null;
+    user = null;
+    tenants = const [];
+    tenant = null;
+    terminals = const [];
+    terminal = null;
+    session = null;
+    lastSale = null;
+    cart.clear();
+    payments.clear();
+    pendingSale = null;
+    busy = false;
+    error = failure == null ? null : 'Signed out on this screen, but the server session could not be ended: $failure';
+    stage = PosStage.signIn;
+    notifyListeners();
+    return true;
+  }
+
   void backToTerminals() {
     if (saleInDoubt) return;
     _detachDevice();

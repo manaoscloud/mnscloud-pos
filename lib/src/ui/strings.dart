@@ -127,5 +127,26 @@ class S {
     },
     'switchTerminal': {'pt': 'Trocar caixa', 'en': 'Change register', 'es': 'Cambiar caja'},
     'signOut': {'pt': 'Sair', 'en': 'Sign out', 'es': 'Salir'},
+    'signOutQuestion': {'pt': 'Sair do PDV?', 'en': 'Sign out of the POS?', 'es': '¿Salir del TPV?'},
+    'signOutHint': {
+      'pt': 'Sua sessão será encerrada neste dispositivo. Para voltar, entre de novo com e-mail e senha.',
+      'en': 'Your session ends on this device. Sign in again with e-mail and password to come back.',
+      'es': 'Su sesión se cerrará en este dispositivo. Para volver, ingrese de nuevo con correo y contraseña.',
+    },
+    'signOutCart': {
+      'pt': 'A venda em andamento será descartada.',
+      'en': 'The sale in progress will be discarded.',
+      'es': 'La venta en curso se descartará.',
+    },
+    'signOutCashOpen': {
+      'pt': 'O caixa continua aberto para o próximo operador. Se o turno terminou, feche o caixa antes de sair.',
+      'en': 'The register stays open for the next operator. If your shift is over, close the register before signing out.',
+      'es': 'La caja sigue abierta para el próximo operador. Si terminó su turno, cierre la caja antes de salir.',
+    },
+    'signOutInDoubt': {
+      'pt': 'Uma venda ainda está sendo confirmada. Aguarde a confirmação antes de sair.',
+      'en': 'A sale is still being confirmed. Wait for it before signing out.',
+      'es': 'Una venta aún se está confirmando. Espere la confirmación antes de salir.',
+    },
   };
 }
