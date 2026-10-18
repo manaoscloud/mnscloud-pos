@@ -12,7 +12,7 @@ import 'store.dart';
 class SqliteOfflineStore implements OfflineStore {
   SqliteOfflineStore._(this._db);
 
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
 
   final Database _db;
 
@@ -66,6 +66,13 @@ class SqliteOfflineStore implements OfflineStore {
           CREATE TABLE local_sale (
             sale_uuid TEXT PRIMARY KEY, session_uuid TEXT NOT NULL, sale TEXT NOT NULL, total TEXT NOT NULL,
             occurred_at TEXT NOT NULL, operation_uuid TEXT NOT NULL) STRICT;
+        ''');
+      }
+      if (version < 2) {
+        _db.execute('''
+          CREATE TABLE local_fiscal (
+            sale_uuid TEXT PRIMARY KEY, access_key TEXT NOT NULL UNIQUE, number INTEGER NOT NULL, document TEXT NOT NULL,
+            operation_uuid TEXT NOT NULL, created_at TEXT NOT NULL) STRICT;
         ''');
       }
       _db.execute('PRAGMA user_version = $schemaVersion');
@@ -257,6 +264,31 @@ class SqliteOfflineStore implements OfflineStore {
       });
 
   @override
+  int nextFiscalNumber(String rangeUuid, int from, int to) => _transaction(() {
+        final key = 'fiscal_next:$rangeUuid';
+        final next = int.tryParse(meta(key) ?? '') ?? from;
+        if (next > to) throw StateError('Offline fiscal range exhausted');
+        setMeta(key, '${next + 1}');
+        return next;
+      });
+
+  @override
+  void recordFiscalDocument(String saleUuid, Map<String, dynamic> document, OutboxEntry operation) => _transaction(() {
+        _db.execute(
+          'INSERT INTO local_fiscal (sale_uuid, access_key, number, document, operation_uuid, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [saleUuid, document['accessKey'], document['number'], jsonEncode(document), operation.operationUuid,
+            DateTime.now().toUtc().toIso8601String()],
+        );
+        _enqueue(operation);
+      });
+
+  @override
+  Map<String, dynamic>? fiscalDocument(String saleUuid) {
+    final rows = _db.select('SELECT document FROM local_fiscal WHERE sale_uuid = ?', [saleUuid]);
+    return rows.isEmpty ? null : (jsonDecode(rows.first['document'] as String) as Map).cast<String, dynamic>();
+  }
+
+  @override
   Map<String, dynamic>? openLocalSession(String terminalUuid) {
     final rows = _db.select(
         "SELECT * FROM local_session WHERE terminal_uuid = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
@@ -301,6 +333,12 @@ class SqliteOfflineStore implements OfflineStore {
       'next_attempt_at = COALESCE(?, next_attempt_at) WHERE operation_uuid = ?',
       [status, result, error, retryAtMs, operationUuid],
     );
+  }
+
+  @override
+  String? operationStatus(String operationUuid) {
+    final rows = _db.select('SELECT status FROM outbox WHERE operation_uuid = ?', [operationUuid]);
+    return rows.isEmpty ? null : rows.first['status'] as String;
   }
 
   @override

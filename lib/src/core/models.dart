@@ -116,6 +116,7 @@ class CatalogItem {
     this.barcode,
     this.nature,
     this.available,
+    this.fiscal,
   });
 
   final String uuid;
@@ -126,6 +127,9 @@ class CatalogItem {
   final String? barcode;
   final String? nature;
   final Decimal? available;
+
+  /// Offline catalog only: ncm, cest, origin and unit for NFC-e issued on the device.
+  final Map<String, dynamic>? fiscal;
 
   factory CatalogItem.fromJson(Map<String, dynamic> json) => CatalogItem(
         uuid: normalizeUuid(json['SaleProductSprUUID'].toString()),

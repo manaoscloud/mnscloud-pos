@@ -13,6 +13,7 @@ import '../offline/device_runtime.dart';
 import '../offline/device_sync_api.dart' as device_api;
 import '../offline/p256.dart';
 import '../offline/sync_engine.dart';
+import '../fiscal/fiscal_device.dart';
 import '../version/app_build_info.dart';
 
 enum ConnectionStatus { online, unreachable, unknown }
@@ -33,8 +34,14 @@ class PosController extends ChangeNotifier {
 
   /// Local-first runtime of the provisioned terminal (null = online mode).
   DeviceRuntime? device;
+  FiscalDevice? _fiscal;
   Timer? _syncTimer;
   String? syncMessage;
+
+  /// NFC-e of the last sale on an installed device: 'online', 'contingency' (signed offline) or null.
+  String? lastFiscalMode;
+  Map<String, dynamic>? lastFiscalDocument;
+  String? fiscalMessage;
 
   bool get deviceMode => device != null;
 
@@ -432,6 +439,8 @@ class PosController extends ChangeNotifier {
     final totalNow = total;
     final changeNow = change;
     final cashNet = cashPaid - changeNow;
+    final cartCopy = List<CartLine>.of(cart);
+    final paymentsCopy = List<PaymentEntry>.of(payments);
     Map<String, dynamic>? stored;
     final ok = _local(() => stored = device!.recordSale(user!.uuid, base, totalNow, cashNet, cart));
     if (!ok || stored == null) return null;
@@ -450,8 +459,58 @@ class PosController extends ChangeNotifier {
     );
     clearSale();
     session = device!.localSession();
+    lastFiscalMode = null;
+    lastFiscalDocument = null;
+    fiscalMessage = null;
     notifyListeners();
+    final operationUuid = device!.lastSaleOperationUuid;
+    if (_fiscal?.enabled == true && operationUuid != null) {
+      unawaited(_fiscalAfterSale(stored!, cartCopy, paymentsCopy, changeNow.toString(), operationUuid));
+    }
     return lastSale;
+  }
+
+  /// NFC-e of a device sale: online when the server already has the sale, otherwise signed on the
+  /// device in offline contingency (queued after the sale; the server transmits it later).
+  Future<void> _fiscalAfterSale(
+      Map<String, dynamic> sale, List<CartLine> cart, List<PaymentEntry> paid, String change, String saleOperation) async {
+    final d = device;
+    final f = _fiscal;
+    if (d == null || f == null) return;
+    await syncNow();
+    final status = d.store.operationStatus(saleOperation);
+    if (status == 'done' || status == 'conflict') {
+      try {
+        await api.client.post('fiscal/pos-sales/${sale['saleUUID']}/nfce', const {});
+        lastFiscalMode = 'online';
+        fiscalMessage = 'NFC-e sent to the tax authority.';
+        notifyListeners();
+        return;
+      } on ApiException catch (e) {
+        if (e.kind != ApiFailureKind.unreachable) {
+          fiscalMessage = e.message;
+          notifyListeners();
+          return;
+        }
+      }
+    }
+    try {
+      lastFiscalDocument = await f.emitContingency(
+        sale: sale,
+        cart: cart,
+        payments: paid,
+        change: change,
+        operatorUuid: user!.uuid,
+        saleOperationUuid: saleOperation,
+        grantUuid: d.grant?.uuid,
+      );
+      lastFiscalMode = 'contingency';
+      fiscalMessage = 'NFC-e issued in offline contingency; it is sent as soon as the connection returns.';
+    } catch (error) {
+      fiscalMessage = 'NFC-e not issued: $error';
+    }
+    notifyListeners();
+    unawaited(syncNow());
   }
 
   /// Attaches the local runtime when this installation is provisioned for [t].
@@ -470,6 +529,7 @@ class PosController extends ChangeNotifier {
 
   void _startDevice(DeviceHost h, P256Key key, String deviceUuid, String terminalUuid) {
     final transport = device_api.DeviceSyncApi(api.client, h.store, key, deviceUuid, appVersion: appBuildInfo.version);
+    _fiscal = FiscalDevice(h.store, h, transport);
     device = DeviceRuntime(
       store: h.store,
       engine: SyncEngine(h.store, transport),
@@ -484,6 +544,7 @@ class PosController extends ChangeNotifier {
     _syncTimer?.cancel();
     _syncTimer = null;
     device = null;
+    _fiscal = null;
   }
 
   /// Provisions this installation for the selected terminal (online, by an authorized user).
@@ -513,6 +574,16 @@ class PosController extends ChangeNotifier {
       final report = await d.engine.sync();
       connection = report.reachable ? ConnectionStatus.online : ConnectionStatus.unreachable;
       syncMessage = null;
+      // Offline NFC-e configuration: at most every 10 minutes while reachable.
+      final last = DateTime.tryParse(d.store.meta('fiscal_refreshed_at') ?? '');
+      if (report.reachable && _fiscal != null && (last == null || DateTime.now().difference(last).inMinutes >= 10)) {
+        try {
+          await _fiscal!.refresh();
+          d.store.setMeta('fiscal_refreshed_at', DateTime.now().toIso8601String());
+        } catch (_) {
+          // Not enabled or not configured yet: sales go on; the NFC-e is issued online.
+        }
+      }
     } on ApiException catch (e) {
       if (e.code == 'DEVICE_SUSPENDED' || e.code == 'DEVICE_REVOKED') {
         syncMessage = 'This device was blocked by the server (${e.code}). Ask the manager to provision it again.';

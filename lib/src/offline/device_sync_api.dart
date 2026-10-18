@@ -2,13 +2,14 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
 import '../api/api_client.dart';
+import '../fiscal/fiscal_device.dart';
 import 'p256.dart';
 import 'store.dart';
 import 'sync_engine.dart';
 
 /// Signed `/pos/sync/*` transport: every request carries the device id, a monotonic counter
 /// (persisted before sending), the time and an ECDSA P-256 signature of the exact request.
-class DeviceSyncApi implements SyncTransport {
+class DeviceSyncApi implements SyncTransport, FiscalTransport {
   DeviceSyncApi(this.client, this.store, this.key, this.deviceUuid, {this.appVersion});
 
   final ApiClient client;
@@ -47,6 +48,15 @@ class DeviceSyncApi implements SyncTransport {
   @override
   Future<Map<String, dynamic>> push(List<Map<String, dynamic>> entries) =>
       _call('POST', 'pos/sync/push', body: {'operations': entries});
+
+  /// Offline NFC-e configuration; `credentials` releases the A1 key and the CSC (audited).
+  @override
+  Future<Map<String, dynamic>> fiscalConfig({bool credentials = false}) =>
+      _call('GET', 'pos/sync/fiscal', query: credentials ? {'credentials': '1'} : null);
+
+  @override
+  Future<Map<String, dynamic>> allocateRange(String environment) =>
+      _call('POST', 'pos/sync/fiscal/ranges', body: {'environment': environment});
 }
 
 /// Registers this installation for a terminal: a new key pair, the public key and a proof of
