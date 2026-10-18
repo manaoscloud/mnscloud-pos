@@ -49,6 +49,11 @@ class PosApi {
     );
   }
 
+  /// Ends the session on the server (revokes the token and clears the web cookie).
+  Future<void> signOut() async {
+    await client.post('auth/signout', const {});
+  }
+
   /// Current session (web: cookie set by the App or by the POS sign-in).
   Future<SignedInUser?> currentUser() async {
     try {

@@ -118,9 +118,51 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
             icon: const Icon(Icons.point_of_sale),
             onPressed: () => showDialog(context: context, builder: (_) => RegisterDialog(controller: controller)),
           ),
+        IconButton(
+          key: const Key('signOut'),
+          tooltip: s.t('signOut'),
+          icon: const Icon(Icons.logout),
+          onPressed: controller.busy ? null : () => confirmSignOut(context, controller),
+        ),
       ],
     );
   }
+}
+
+/// Asks before signing out and says what happens to the sale in progress and the open register.
+Future<void> confirmSignOut(BuildContext context, PosController controller) async {
+  final s = S.of(context);
+  if (controller.saleInDoubt) {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.t('signOut')),
+        content: Text(s.t('signOutInDoubt')),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('close')))],
+      ),
+    );
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(s.t('signOutQuestion')),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.t('signOutHint')),
+        if (controller.cart.isNotEmpty) ...[const SizedBox(height: 12), Text(s.t('signOutCart'))],
+        if (controller.session?.isOpen == true) ...[const SizedBox(height: 12), Text(s.t('signOutCashOpen'))],
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.t('cancel'))),
+        FilledButton(
+          key: const Key('confirmSignOut'),
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(s.t('signOut')),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) await controller.signOut();
 }
 
 class ErrorBanner extends StatelessWidget {
