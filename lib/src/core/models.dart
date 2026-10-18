@@ -20,6 +20,7 @@ class PosTerminal {
     required this.offlineEnabled,
     this.priceListUuid,
     this.openSessionUuid,
+    this.pixAvailable = true,
   });
 
   factory PosTerminal.fromJson(Map<String, dynamic> json) => PosTerminal(
@@ -39,6 +40,8 @@ class PosTerminal {
         openSessionUuid: _text(json['OpenSessionUUID']) == null
             ? null
             : normalizeUuid(json['OpenSessionUUID'].toString()),
+        // Sent by GET /pos/terminals/{uuid}; absent (older API, lists) keeps Pix as configured.
+        pixAvailable: json['PixAvailable'] != false && json['PixAvailable']?.toString() != '0',
       );
 
   final String uuid;
@@ -51,6 +54,9 @@ class PosTerminal {
   final bool offlineEnabled;
   final String? priceListUuid;
   final String? openSessionUuid;
+
+  /// The tenant has a payment gateway, so Pix can be charged.
+  final bool pixAvailable;
 }
 
 /// Operational cash session of a terminal.
@@ -67,6 +73,9 @@ class CashSession {
     required this.totalsByMethod,
     this.countedCash,
     this.operatorName,
+    this.supplyTotal,
+    this.withdrawalTotal,
+    this.cashSalesNet,
   });
 
   factory CashSession.fromJson(Map<String, dynamic> json) {
@@ -87,6 +96,9 @@ class CashSession {
       pendingPayments: int.tryParse(json['PendingPayments']?.toString() ?? '') ?? 0,
       totalsByMethod: totals,
       operatorName: _text(json['OperatorName']),
+      supplyTotal: _text(json['SupplyTotal']) == null ? null : money(json['SupplyTotal']),
+      withdrawalTotal: _text(json['WithdrawalTotal']) == null ? null : money(json['WithdrawalTotal']),
+      cashSalesNet: _text(json['CashSalesNet']) == null ? null : money(json['CashSalesNet']),
     );
   }
 
@@ -100,6 +112,11 @@ class CashSession {
   final Decimal saleTotal;
   final int pendingPayments;
   final Map<String, Decimal> totalsByMethod;
+
+  /// Drawer breakdown (online sessions): supplies, withdrawals and cash kept from sales.
+  final Decimal? supplyTotal;
+  final Decimal? withdrawalTotal;
+  final Decimal? cashSalesNet;
   final String? operatorName;
 
   bool get isOpen => status == 'open';
