@@ -33,6 +33,14 @@ abstract class OfflineStore {
   void closeSession(String sessionUuid, String countedCash, String closedAt, OutboxEntry operation);
   void recordSale(Map<String, dynamic> sale, String cashNet, OutboxEntry operation);
 
+  /// Reserves (persists) the next number of an offline range before the NFC-e is signed; throws when
+  /// the range is exhausted. A number reserved for a document that was never stored is a gap the
+  /// tax authority voids (inutilizacao). The signed NFC-e and its outbox operation are then stored
+  /// together by [recordFiscalDocument].
+  int nextFiscalNumber(String rangeUuid, int from, int to);
+  void recordFiscalDocument(String saleUuid, Map<String, dynamic> document, OutboxEntry operation);
+  Map<String, dynamic>? fiscalDocument(String saleUuid);
+
   Map<String, dynamic>? openLocalSession(String terminalUuid);
   String localExpectedCash(String sessionUuid);
 
@@ -40,6 +48,9 @@ abstract class OfflineStore {
   List<OutboxEntry> dueOperations(int nowMs, {int limit = 50});
   void markOperation(String operationUuid, String status, {String? result, String? error, int? retryAtMs});
   Map<String, int> outboxCounts();
+
+  /// Outbox status of one operation (pending, retry, done, conflict, rejected) or null.
+  String? operationStatus(String operationUuid);
   List<OutboxEntry> problemOperations({int limit = 50});
 
   void close();

@@ -803,6 +803,24 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
             ],
           if (onDevice)
             Chip(avatar: const Icon(Icons.sync, size: 18), label: Text(s.t('waitingSync'))),
+          if (onDevice)
+            ListenableBuilder(
+              listenable: widget.controller,
+              builder: (context, _) {
+                final doc = widget.controller.lastFiscalDocument;
+                final message = widget.controller.fiscalMessage;
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  if (doc != null) ...[
+                    const SizedBox(height: 8),
+                    Text('${s.t('nfceContingency')} · ${s.t('saleNumber')} ${doc['number']} · ${s.t('series')} ${doc['series']}',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    Center(child: QrImageView(data: '${doc['qrCode']}', size: 200, backgroundColor: Colors.white)),
+                    SelectableText('${doc['accessKey']}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                  if (message != null) Text(message, style: Theme.of(context).textTheme.bodySmall),
+                ]);
+              },
+            ),
           const SizedBox(height: 12),
           Text(s.t('noFiscal'), style: Theme.of(context).textTheme.bodySmall),
         ]),

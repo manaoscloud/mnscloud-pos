@@ -37,6 +37,8 @@ class S {
     'provision': {'pt': 'Ativar neste aparelho', 'en': 'Enable on this device', 'es': 'Habilitar en este equipo'},
     'saleSavedOnDevice': {'pt': 'Venda salva neste aparelho', 'en': 'Sale saved on this device', 'es': 'Venta guardada en este equipo'},
     'waitingSync': {'pt': 'Aguardando sincronização', 'en': 'Waiting for sync', 'es': 'Esperando sincronización'},
+    'nfceContingency': {'pt': 'NFC-e em contingência', 'en': 'NFC-e in contingency', 'es': 'NFC-e en contingencia'},
+    'series': {'pt': 'Série', 'en': 'Series', 'es': 'Serie'},
     'signIn': {'pt': 'Entrar', 'en': 'Sign in', 'es': 'Ingresar'},
     'email': {'pt': 'E-mail', 'en': 'E-mail', 'es': 'Correo'},
     'password': {'pt': 'Senha', 'en': 'Password', 'es': 'Contraseña'},

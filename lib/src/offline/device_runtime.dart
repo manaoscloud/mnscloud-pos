@@ -74,6 +74,9 @@ class DeviceRuntime {
 
   bool get catalogReady => store.meta('catalog_cursor') != null;
 
+  /// Outbox operation of the last sale recorded (the offline NFC-e depends on it).
+  String? lastSaleOperationUuid;
+
   String _now() => _clock().toUtc().toIso8601String();
 
   Map<String, dynamic> _operation(String kind, String operator, Map<String, dynamic> payload,
@@ -165,6 +168,7 @@ class DeviceRuntime {
       code: item['id']?.toString(),
       barcode: item['barcode']?.toString(),
       nature: item['fiscalNature']?.toString(),
+      fiscal: {'ncm': item['ncm'], 'cest': item['cest'], 'origin': item['origin'], 'unit': item['unit']},
     );
   }
 
@@ -211,6 +215,7 @@ class DeviceRuntime {
       dependsOn: [_openOperation(sessionUuid)],
     );
     store.recordSale({...sale, 'total': total.toString()}, cashNet.toString(), SyncEngine.entry(operation));
+    lastSaleOperationUuid = operation['operationUUID'] as String;
     return sale;
   }
 
