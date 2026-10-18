@@ -12,6 +12,15 @@ import 'strings.dart';
 
 String fmt(Decimal value) => value.format();
 
+/// Amount typed by the operator: `1234,56`, `1.234,56` (pt-BR grouping) or `1234.56`. Null when it
+/// is not a number, so a typo is shown as an error instead of becoming zero.
+Decimal? parseAmount(String text, [int scale = 4]) {
+  var value = text.trim().replaceAll(' ', '');
+  if (value.isEmpty) return null;
+  if (value.contains(',')) value = value.replaceAll('.', '').replaceAll(',', '.');
+  return Decimal.tryParse(value, scale);
+}
+
 /// Root screen: follows the controller stage.
 class PosHome extends StatelessWidget {
   const PosHome({super.key, required this.controller});
@@ -171,7 +180,7 @@ class ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialBanner(
-        content: Text(controller.error ?? ''),
+        content: Text(S.of(context).message(controller.error ?? '')),
         leading: const Icon(Icons.error_outline),
         actions: [TextButton(onPressed: controller.dismissError, child: Text(S.of(context).t('close')))],
       );
@@ -309,6 +318,7 @@ class OpenSessionView extends StatefulWidget {
 class _OpenSessionViewState extends State<OpenSessionView> {
   final _amount = TextEditingController(text: '0,00');
   final _deviceName = TextEditingController();
+  String? _amountError;
 
   @override
   void initState() {
@@ -330,13 +340,17 @@ class _OpenSessionViewState extends State<OpenSessionView> {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(s.t('openSession'), style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        MoneyField(controller: _amount, label: s.t('openingAmount')),
+        MoneyField(controller: _amount, label: s.t('openingAmount'), errorText: _amountError, autofocus: true),
         const SizedBox(height: 20),
         FilledButton.icon(
           icon: const Icon(Icons.lock_open),
           onPressed: widget.controller.busy
               ? null
-              : () => widget.controller.openSession(Decimal.tryParse(_amount.text) ?? Decimal.zero()),
+              : () {
+                  final amount = _amount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_amount.text);
+                  setState(() => _amountError = amount == null || amount.isNegative ? s.t('invalidAmount') : null);
+                  if (_amountError == null) widget.controller.openSession(amount!);
+                },
           label: Text(s.t('openSession')),
         ),
         TextButton(onPressed: widget.controller.backToTerminals, child: Text(s.t('switchTerminal'))),
@@ -365,21 +379,56 @@ class _OpenSessionViewState extends State<OpenSessionView> {
   }
 }
 
-class MoneyField extends StatelessWidget {
-  const MoneyField({super.key, required this.controller, required this.label, this.onSubmitted, this.autofocus = false});
+/// Decimal field: selects its text on focus, so typing replaces a prefilled `0,00`.
+class MoneyField extends StatefulWidget {
+  const MoneyField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.onSubmitted,
+    this.autofocus = false,
+    this.errorText,
+    this.helperText,
+  });
   final TextEditingController controller;
   final String label;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
+  final String? errorText;
+  final String? helperText;
+
+  @override
+  State<MoneyField> createState() => _MoneyFieldState();
+}
+
+class _MoneyFieldState extends State<MoneyField> {
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (_focus.hasFocus) {
+        widget.controller.selection = TextSelection(baseOffset: 0, extentOffset: widget.controller.text.length);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => TextField(
-        controller: controller,
-        autofocus: autofocus,
-        decoration: InputDecoration(labelText: label),
+        controller: widget.controller,
+        focusNode: _focus,
+        autofocus: widget.autofocus,
+        decoration: InputDecoration(labelText: widget.label, errorText: widget.errorText, helperText: widget.helperText),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-        onSubmitted: onSubmitted,
+        onSubmitted: widget.onSubmitted,
       );
 }
 
@@ -503,7 +552,7 @@ class _CatalogPane extends StatelessWidget {
                 title: Text(item.name),
                 subtitle: Text([
                   if (item.code != null) item.code!,
-                  if (item.available != null) '${s.t('quantity')}: ${item.available!.format(places: 0)}',
+                  if (item.available != null) '${s.t('stock')}: ${item.available!.format(places: 0)}',
                 ].join(' · ')),
                 trailing: Text(fmt(item.price), style: Theme.of(context).textTheme.titleMedium),
                 onTap: () => onPick(item),
@@ -642,33 +691,49 @@ class _LineDialog extends StatefulWidget {
 class _LineDialogState extends State<_LineDialog> {
   late final _qty = TextEditingController(text: widget.line.quantity.format(places: 3, groupSeparator: ''));
   late final _discount = TextEditingController(text: widget.line.discount.format(groupSeparator: ''));
+  String? _qtyError;
   String? _error;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final max = widget.controller.discountLimit(widget.line);
     return AlertDialog(
       title: Text(widget.line.item.name),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        MoneyField(controller: _qty, label: s.t('quantity'), autofocus: true),
+        MoneyField(controller: _qty, label: s.t('quantity'), autofocus: true, errorText: _qtyError),
         const SizedBox(height: 12),
-        MoneyField(controller: _discount, label: s.t('discount')),
-        if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!)),
+        MoneyField(
+          controller: _discount,
+          label: s.t('discount'),
+          errorText: _error,
+          helperText: '${s.t('discountMax')}: ${fmt(max)}',
+        ),
       ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel'))),
         FilledButton(
           onPressed: () {
-            final qty = Decimal.tryParse(_qty.text, 6);
-            final discount = Decimal.tryParse(_discount.text) ?? Decimal.zero();
-            if (qty == null) return;
-            widget.controller.setQuantity(widget.line, qty);
+            final qty = parseAmount(_qty.text, 6);
+            final discount = _discount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_discount.text);
+            setState(() {
+              _qtyError = qty == null || qty.isNegative ? s.t('invalidAmount') : null;
+              _error = discount == null ? s.t('invalidAmount') : null;
+            });
+            if (qty == null || qty.isNegative || discount == null) return;
             if (qty.isPositive) {
+              // Check the discount against the new quantity before changing the line.
+              final previous = widget.line.quantity;
+              widget.controller.setQuantity(widget.line, qty);
               final problem = widget.controller.setDiscount(widget.line, discount);
               if (problem != null) {
-                setState(() => _error = problem);
+                widget.controller.setQuantity(widget.line, previous);
+                setState(() => _error = '${s.message(problem)} ${s.t('discountMax')}: '
+                    '${fmt(widget.controller.discountLimit(CartLine(item: widget.line.item, quantity: qty)))}');
                 return;
               }
+            } else {
+              widget.controller.setQuantity(widget.line, qty);
             }
             Navigator.pop(context);
           },
@@ -696,9 +761,15 @@ class _PaymentDialogState extends State<PaymentDialog> {
   /// Pix needs the tenant gateway online, so installed devices (local-first) take cash and cards.
   List<String> get _accepted {
     final all = widget.controller.terminal?.paymentMethods ?? const ['cash'];
-    final usable = widget.controller.deviceMode ? all.where((m) => m != 'pix').toList() : all;
+    final usable = widget.controller.deviceMode || !_pixReady ? all.where((m) => m != 'pix').toList() : all;
     return usable.isEmpty ? const ['cash'] : usable;
   }
+
+  /// Pix is charged on the tenant payment gateway; without one the option is hidden.
+  bool get _pixReady => widget.controller.terminal?.pixAvailable ?? true;
+  bool get _pixHidden =>
+      !widget.controller.deviceMode && !_pixReady && (widget.controller.terminal?.paymentMethods.contains('pix') ?? false);
+  String? _amountError;
 
   @override
   void initState() {
@@ -725,8 +796,12 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 onSelected: (_) => setState(() => _method = PaymentMethodCode.fromCode(code)),
               ),
           ]),
+          if (_pixHidden) ...[
+            const SizedBox(height: 8),
+            Text(s.t('pixUnavailable'), style: Theme.of(context).textTheme.bodySmall),
+          ],
           const SizedBox(height: 12),
-          MoneyField(controller: _amount, label: s.t('amount'), autofocus: true),
+          MoneyField(controller: _amount, label: s.t('amount'), autofocus: true, errorText: _amountError),
           if (card) ...[
             const SizedBox(height: 12),
             TextField(controller: _nsu, decoration: InputDecoration(labelText: s.t('nsu'))),
@@ -745,7 +820,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel'))),
         FilledButton(
           onPressed: () {
-            final amount = Decimal.tryParse(_amount.text);
+            final amount = parseAmount(_amount.text);
+            setState(() => _amountError = amount == null || !amount.isPositive ? s.t('invalidAmount') : null);
             if (amount == null || !amount.isPositive) return;
             // Only cash may exceed the remaining amount (change).
             final value = _method == PaymentMethod.cash ? amount : amount.min(widget.controller.remaining);
@@ -778,6 +854,7 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
   late PosSaleResult _sale = widget.sale;
   final Map<String, String> _pixCodes = {};
   Timer? _poll;
+  String? _pixError;
 
   @override
   void dispose() {
@@ -790,7 +867,14 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
 
   Future<void> _generatePix(String paymentUuid) async {
     final charge = await widget.controller.pixCharge(paymentUuid);
-    final code = charge?['pixCopyPaste']?.toString();
+    if (!mounted) return;
+    if (charge == null) {
+      // Shown here: the banner of the main screen is hidden behind this dialog.
+      setState(() => _pixError = widget.controller.error);
+      widget.controller.dismissError();
+      return;
+    }
+    final code = charge['pixCopyPaste']?.toString();
     if (code != null && code.isNotEmpty) setState(() => _pixCodes[paymentUuid] = code);
     _poll ??= Timer.periodic(const Duration(seconds: 5), (_) => _check());
   }
@@ -843,6 +927,10 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
                 ),
               Text(s.t('pixHint'), style: Theme.of(context).textTheme.bodySmall),
             ],
+          if (_pixError != null) ...[
+            const SizedBox(height: 8),
+            Text(s.message(_pixError!), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
           if (onDevice)
             Chip(avatar: const Icon(Icons.sync, size: 18), label: Text(s.t('waitingSync'))),
           if (onDevice)
@@ -872,7 +960,7 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
   }
 }
 
-/// Register operations: cash in/out, summary and closing.
+/// Register operations: cash in/out, drawer summary, sales of the session (cancel) and closing.
 class RegisterDialog extends StatefulWidget {
   const RegisterDialog({super.key, required this.controller});
   final PosController controller;
@@ -885,11 +973,26 @@ class _RegisterDialogState extends State<RegisterDialog> {
   final _amount = TextEditingController();
   final _notes = TextEditingController();
   final _reason = TextEditingController();
+  String? _amountError;
+  String? _reasonError;
+  String? _saved;
+  List<PosSaleResult> _sales = const [];
 
   @override
   void initState() {
     super.initState();
-    widget.controller.refreshSession();
+    // After the first frame: these notify the controller listeners, which must not happen while
+    // the screen under the dialog is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.controller.dismissError();
+      widget.controller.refreshSession();
+      _loadSales();
+    });
+  }
+
+  Future<void> _loadSales() async {
+    final sales = await widget.controller.sessionSales();
+    if (mounted) setState(() => _sales = sales);
   }
 
   @override
@@ -899,6 +1002,8 @@ class _RegisterDialogState extends State<RegisterDialog> {
       listenable: widget.controller,
       builder: (context, _) {
         final session = widget.controller.session;
+        final error = widget.controller.error;
+        final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
         return AlertDialog(
           title: Text(s.t('register')),
           content: SizedBox(
@@ -908,42 +1013,77 @@ class _RegisterDialogState extends State<RegisterDialog> {
                 if (session != null) ...[
                   _TotalRow(label: s.t('openingAmount'), value: session.openingAmount),
                   _TotalRow(label: s.t('sales'), value: session.saleTotal),
-                  for (final entry in session.totalsByMethod.entries) _TotalRow(label: s.t(entry.key), value: entry.value),
+                  for (final entry in session.totalsByMethod.entries)
+                    if (entry.key != 'cash') _TotalRow(label: s.t(entry.key), value: entry.value),
+                  if (session.cashSalesNet != null)
+                    _TotalRow(label: s.t('cashSalesNet'), value: session.cashSalesNet!)
+                  else if (session.totalsByMethod['cash'] case final cash?)
+                    _TotalRow(label: s.t('cash'), value: cash),
+                  if (session.supplyTotal != null && !session.supplyTotal!.isZero)
+                    _TotalRow(label: s.t('supplies'), value: session.supplyTotal!),
+                  if (session.withdrawalTotal != null && !session.withdrawalTotal!.isZero)
+                    _TotalRow(label: s.t('withdrawals'), value: -session.withdrawalTotal!),
                   _TotalRow(label: s.t('expectedCash'), value: session.expectedCash, strong: true),
                   if (session.pendingPayments > 0) Text('${s.t('pendingPayments')}: ${session.pendingPayments}'),
                   const Divider(),
                 ],
-                MoneyField(controller: _amount, label: s.t('amount')),
+                // Errors show here: the banner of the main screen is hidden behind this dialog.
+                if (error != null) ...[
+                  Text(s.message(error), style: errorStyle),
+                  const SizedBox(height: 8),
+                ],
+                if (_saved != null) ...[
+                  Text(_saved!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                  const SizedBox(height: 8),
+                ],
+                MoneyField(controller: _amount, label: s.t('amount'), errorText: _amountError),
                 TextField(controller: _notes, decoration: InputDecoration(labelText: s.t('notes'))),
                 const SizedBox(height: 12),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   OutlinedButton(
-                    onPressed: () => _movement('supply'),
+                    onPressed: widget.controller.busy ? null : () => _movement('supply'),
                     child: Text(s.t('supply')),
                   ),
                   OutlinedButton(
-                    onPressed: () => _movement('withdrawal'),
+                    onPressed: widget.controller.busy ? null : () => _movement('withdrawal'),
                     child: Text(s.t('withdrawal')),
                   ),
                   FilledButton.tonal(
-                    onPressed: () async {
-                      final counted = Decimal.tryParse(_amount.text);
-                      if (counted == null) return;
-                      final ok = await widget.controller.closeSession(counted, _notes.text.trim().isEmpty ? null : _notes.text.trim());
-                      if (ok && context.mounted) Navigator.pop(context);
-                    },
+                    onPressed: widget.controller.busy ? null : _close,
                     child: Text('${s.t('closeSession')} (${s.t('countedCash')})'),
                   ),
                 ]),
-                if (widget.controller.lastSale != null &&
+                if (!widget.controller.deviceMode) ...[
+                  const Divider(height: 32),
+                  Text(s.t('sessionSales'), style: Theme.of(context).textTheme.titleMedium),
+                  if (_sales.isEmpty)
+                    Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.t('noSessionSales')))
+                  else ...[
+                    TextField(
+                      controller: _reason,
+                      decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError),
+                    ),
+                    for (final sale in _sales)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${s.t('saleNumber')} ${sale.number} · ${fmt(sale.total)}'),
+                        subtitle: Text(sale.commercialState == 'canceled'
+                            ? s.t('canceled')
+                            : (sale.paymentState == 'confirmed' ? s.t('paymentConfirmed') : s.t('paymentPending'))),
+                        trailing: sale.commercialState == 'confirmed'
+                            ? TextButton(
+                                onPressed: widget.controller.busy ? null : () => _cancel(sale),
+                                child: Text(s.t('cancelThisSale')),
+                              )
+                            : null,
+                      ),
+                  ],
+                ] else if (widget.controller.lastSale != null &&
                     widget.controller.lastSale!.commercialState == 'confirmed') ...[
                   const Divider(),
-                  TextField(controller: _reason, decoration: InputDecoration(labelText: s.t('reason'))),
+                  TextField(controller: _reason, decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError)),
                   TextButton(
-                    onPressed: () async {
-                      if (_reason.text.trim().isEmpty) return;
-                      await widget.controller.cancelSale(widget.controller.lastSale!.uuid, _reason.text.trim());
-                    },
+                    onPressed: () => _cancel(widget.controller.lastSale!),
                     child: Text('${s.t('cancelSale')} · ${widget.controller.lastSale!.number}'),
                   ),
                 ],
@@ -956,12 +1096,78 @@ class _RegisterDialogState extends State<RegisterDialog> {
     );
   }
 
+  Decimal? _validAmount() {
+    final amount = parseAmount(_amount.text);
+    setState(() {
+      _amountError = amount == null || amount.isNegative ? S.of(context).t('invalidAmount') : null;
+      _saved = null;
+    });
+    return _amountError == null ? amount : null;
+  }
+
   Future<void> _movement(String kind) async {
-    final amount = Decimal.tryParse(_amount.text);
-    if (amount == null || !amount.isPositive) return;
-    await widget.controller.cashMovement(kind, amount, _notes.text.trim().isEmpty ? null : _notes.text.trim());
-    _amount.clear();
-    _notes.clear();
+    final amount = _validAmount();
+    if (amount == null) return;
+    if (!amount.isPositive) {
+      setState(() => _amountError = S.of(context).t('invalidAmount'));
+      return;
+    }
+    final ok = await widget.controller.cashMovement(kind, amount, _notes.text.trim().isEmpty ? null : _notes.text.trim());
+    if (!mounted) return;
+    // The typed amount stays when the movement is refused, so the operator can correct it.
+    if (ok) {
+      _amount.clear();
+      _notes.clear();
+      setState(() => _saved = S.of(context).t('movementSaved'));
+    }
+  }
+
+  Future<void> _close() async {
+    final counted = _validAmount();
+    if (counted == null) return;
+    final ok = await widget.controller.closeSession(counted, _notes.text.trim().isEmpty ? null : _notes.text.trim());
+    if (!ok || !mounted) return;
+    final closed = widget.controller.lastClosedSession;
+    Navigator.pop(context);
+    if (closed != null) {
+      await showDialog<void>(context: context, builder: (_) => SessionClosedDialog(session: closed));
+    }
+  }
+
+  Future<void> _cancel(PosSaleResult sale) async {
+    final reason = _reason.text.trim();
+    setState(() => _reasonError = reason.isEmpty ? S.of(context).t('cancelReasonRequired') : null);
+    if (reason.isEmpty) return;
+    final result = await widget.controller.cancelSale(sale.uuid, reason);
+    if (result != null && mounted) {
+      _reason.clear();
+      await _loadSales();
+    }
   }
 }
 
+/// Closing summary: what the drawer should hold, what was counted and the difference.
+class SessionClosedDialog extends StatelessWidget {
+  const SessionClosedDialog({super.key, required this.session});
+  final CashSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final counted = session.countedCash ?? Decimal.zero();
+    final difference = counted - session.expectedCash;
+    return AlertDialog(
+      title: Text(s.t('sessionClosed')),
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _TotalRow(label: s.t('sales'), value: session.saleTotal),
+          _TotalRow(label: s.t('expectedCash'), value: session.expectedCash),
+          _TotalRow(label: s.t('countedCash'), value: counted),
+          _TotalRow(label: s.t('difference'), value: difference, strong: true),
+        ]),
+      ),
+      actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(s.t('close')))],
+    );
+  }
+}

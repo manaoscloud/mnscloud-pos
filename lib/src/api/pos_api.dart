@@ -124,6 +124,12 @@ class PosApi {
           .map(CatalogItem.fromJson)
           .toList();
 
+  /// Sales of one cash session, newest first.
+  Future<List<PosSaleResult>> sessionSales(String sessionUuid) async =>
+      _items(await client.get('pos/sales', {'sessionUUID': sessionUuid, 'limit': '50'}))
+          .map(PosSaleResult.fromJson)
+          .toList();
+
   Future<PosSaleResult?> sale(String uuid) async {
     try {
       return PosSaleResult.fromJson((await client.get('pos/sales/$uuid') as Map).cast<String, dynamic>());

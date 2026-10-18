@@ -62,6 +62,9 @@ class PosController extends ChangeNotifier {
   /// Sale being submitted: same UUID and payload until the server confirms it.
   Map<String, dynamic>? pendingSale;
   PosSaleResult? lastSale;
+
+  /// Session just closed on this screen, for the closing summary.
+  CashSession? lastClosedSession;
   String? error;
   bool busy = false;
 
@@ -186,6 +189,7 @@ class PosController extends ChangeNotifier {
     terminal = null;
     session = null;
     lastSale = null;
+    lastClosedSession = null;
     cart.clear();
     payments.clear();
     pendingSale = null;
@@ -236,17 +240,25 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cashMovement(String kind, Decimal amount, String? notes) async {
+  /// Supply or withdrawal; true when it was stored.
+  Future<bool> cashMovement(String kind, Decimal amount, String? notes) async {
     final s = session;
-    if (s == null) return;
+    if (s == null) return false;
     if (deviceMode) {
-      _local(() => session = device!.cashMovement(user!.uuid, s.uuid, kind, amount, notes));
-      return;
+      return _local(() => session = device!.cashMovement(user!.uuid, s.uuid, kind, amount, notes));
     }
     final key = '$kind:${uuidV4()}';
     final fresh = await _run(() => api.cashMovement(s.uuid, kind, amount.toString(), notes, key));
     if (fresh != null) session = fresh;
     notifyListeners();
+    return fresh != null;
+  }
+
+  /// Sales of the open session (online), so any of them can be canceled, not only the last one.
+  Future<List<PosSaleResult>> sessionSales() async {
+    final s = session;
+    if (s == null || deviceMode) return const [];
+    return await _run(() => api.sessionSales(s.uuid)) ?? const [];
   }
 
   Future<bool> closeSession(Decimal counted, String? notes) async {
@@ -255,6 +267,18 @@ class PosController extends ChangeNotifier {
     if (deviceMode) {
       final ok = _local(() => device!.closeSession(user!.uuid, s.uuid, counted, notes));
       if (!ok) return false;
+      lastClosedSession = CashSession(
+        uuid: s.uuid,
+        status: 'closed',
+        openedAt: s.openedAt,
+        openingAmount: s.openingAmount,
+        expectedCash: s.expectedCash,
+        saleCount: s.saleCount,
+        saleTotal: s.saleTotal,
+        pendingPayments: s.pendingPayments,
+        totalsByMethod: s.totalsByMethod,
+        countedCash: counted,
+      );
       session = null;
       stage = PosStage.openSession;
       clearSale();
@@ -263,6 +287,7 @@ class PosController extends ChangeNotifier {
     }
     final closed = await _run(() => api.closeSession(s.uuid, counted.toString(), notes));
     if (closed == null) return false;
+    lastClosedSession = closed;
     session = closed;
     stage = PosStage.openSession;
     clearSale();
@@ -325,11 +350,13 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Largest discount the terminal allows on this line.
+  Decimal discountLimit(CartLine line) => line.gross.percent(terminal?.maxDiscountPercent ?? Decimal.zero());
+
   /// Applies a line discount within the terminal limit (the server checks it again).
   String? setDiscount(CartLine line, Decimal value) {
     if (saleInDoubt) return 'A sale is waiting for the server confirmation.';
-    final limit = line.gross.percent(terminal?.maxDiscountPercent ?? Decimal.zero());
-    if (value.isNegative || value > limit) return 'Discount above the terminal limit.';
+    if (value.isNegative || value > discountLimit(line)) return 'Discount above the terminal limit.';
     line.discount = value;
     payments.clear();
     notifyListeners();
