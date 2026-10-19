@@ -10,12 +10,58 @@ class TenantOption {
 }
 
 class SignedInUser {
-  SignedInUser({required this.uuid, required this.name, required this.email, this.jwt, this.environmentUuid});
+  SignedInUser({required this.uuid, required this.name, required this.email});
   final String uuid;
   final String name;
   final String email;
-  final String? jwt;
+}
+
+/// A POS session issued by the API (`/pos/auth/*`), independent of the App session: ending it
+/// never signs the App out, and signing out of the App never ends it.
+class PosSessionGrant {
+  PosSessionGrant({
+    required this.user,
+    required this.accessToken,
+    required this.expiresIn,
+    this.refreshToken,
+    this.environmentUuid,
+    this.terminalUuid,
+  });
+  final SignedInUser user;
+  final String accessToken;
+
+  /// Seconds the access token stays valid.
+  final int expiresIn;
+
+  /// Installed apps only; the web receives it as an HttpOnly cookie.
+  final String? refreshToken;
+
+  /// Tenant and register chosen in the App (handoff only).
   final String? environmentUuid;
+  final String? terminalUuid;
+
+  static PosSessionGrant fromData(dynamic data) {
+    final map = data is Map ? data : const {};
+    final session = (map['session'] as Map?) ?? const {};
+    String? text(Object? value) {
+      final result = value?.toString().trim();
+      return result == null || result.isEmpty ? null : result;
+    }
+
+    final email = text(session['email']) ?? '';
+    return PosSessionGrant(
+      user: SignedInUser(
+        uuid: text(session['userUUID']) ?? '',
+        name: text(session['name']) ?? email,
+        email: email,
+      ),
+      accessToken: text(map['accessToken']) ?? '',
+      expiresIn: int.tryParse(map['expiresIn']?.toString() ?? '') ?? 600,
+      refreshToken: text(map['refreshToken']),
+      environmentUuid: text(map['environmentUUID']),
+      terminalUuid: text(map['terminalUUID']),
+    );
+  }
 }
 
 /// Outcome of a sale submission. `pending` means the answer is unknown and the same sale (same
@@ -37,38 +83,31 @@ class PosApi {
   PosApi(this.client);
   final ApiClient client;
 
-  Future<SignedInUser> signIn(String email, String password) async {
-    final data = await client.post('auth/signin', {'email': email, 'password': password, 'rememberMe': false});
-    final user = (data is Map ? data['user'] : null) as Map? ?? const {};
-    return SignedInUser(
-      uuid: user['uuid']?.toString() ?? '',
-      name: user['name']?.toString() ?? '',
-      email: user['email']?.toString() ?? email,
-      jwt: data is Map ? data['jwt']?.toString() : null,
-      environmentUuid: user['EnvironmentUUID']?.toString(),
-    );
+  String get _clientKind => client.isWebClient ? 'web' : 'native';
+
+  Future<PosSessionGrant> signIn(String email, String password) async =>
+      _apply(await client.post('pos/auth/signin', {'email': email, 'password': password, 'clientKind': _clientKind}));
+
+  /// Single-use code from the App (`/pos/#handoff=<code>`).
+  Future<PosSessionGrant> exchange(String code) async =>
+      _apply(await client.post('pos/auth/exchange', {'code': code, 'clientKind': _clientKind}));
+
+  /// Rotates the refresh token: the web sends the HttpOnly cookie, installed apps the token.
+  Future<PosSessionGrant> refresh() async {
+    final token = client.refreshToken;
+    return _apply(await client.post('pos/auth/refresh', token == null ? const {} : {'refreshToken': token}));
   }
 
-  /// Ends the session on the server (revokes the token and clears the web cookie).
+  /// Ends only this POS session (and its refresh cookie); the App session stays signed in.
   Future<void> signOut() async {
-    await client.post('auth/signout', const {});
+    await client.post('pos/auth/signout', const {});
   }
 
-  /// Current session (web: cookie set by the App or by the POS sign-in).
-  Future<SignedInUser?> currentUser() async {
-    try {
-      final data = await client.get('user/me');
-      final user = (data is Map ? (data['user'] ?? data) : null) as Map? ?? const {};
-      return SignedInUser(
-        uuid: (user['uuid'] ?? user['UserUUID'] ?? '').toString(),
-        name: (user['name'] ?? user['Name'] ?? '').toString(),
-        email: (user['email'] ?? user['Email'] ?? '').toString(),
-        environmentUuid: user['EnvironmentUUID']?.toString(),
-      );
-    } on ApiException catch (e) {
-      if (e.kind == ApiFailureKind.unauthorized) return null;
-      rethrow;
-    }
+  PosSessionGrant _apply(dynamic data) {
+    final grant = PosSessionGrant.fromData(data);
+    client.bearerToken = grant.accessToken;
+    if (grant.refreshToken != null) client.refreshToken = grant.refreshToken;
+    return grant;
   }
 
   Future<List<TenantOption>> tenants() async {

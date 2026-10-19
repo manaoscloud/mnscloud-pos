@@ -14,6 +14,7 @@ import '../offline/device_sync_api.dart' as device_api;
 import '../offline/p256.dart';
 import '../offline/sync_engine.dart';
 import '../fiscal/fiscal_device.dart';
+import '../platform/session.dart' show takeHandoffCode;
 import '../version/app_build_info.dart';
 
 enum ConnectionStatus { online, unreachable, unknown }
@@ -25,7 +26,9 @@ enum PosStage { signIn, tenant, terminal, openSession, selling }
 /// whose terminal is provisioned on this device works local-first ([DeviceRuntime]): sales and
 /// cash events are stored on the device and synchronized, online or offline.
 class PosController extends ChangeNotifier {
-  PosController(this.api, {this.host});
+  PosController(this.api, {this.host}) {
+    api.client.onSessionExpired = _renewSession;
+  }
 
   final PosApi api;
 
@@ -99,36 +102,111 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Opens the POS session without asking for the password when possible: a sign-in code from
+  /// the App (`#handoff=`) or, on the web, the POS refresh cookie of an earlier sign-in. The App
+  /// session of the same browser is never used.
   Future<void> restore() async {
-    final current = await _run(api.currentUser);
-    if (current == null) {
-      stage = PosStage.signIn;
-      notifyListeners();
+    final code = takeHandoffCode();
+    if (code != null) {
+      await openFromApp(code);
       return;
     }
-    user = current;
-    await _afterSignIn();
+    if (api.client.isWebClient) {
+      try {
+        final grant = await api.refresh();
+        connection = ConnectionStatus.online;
+        await _started(grant);
+        return;
+      } on ApiException catch (e) {
+        // No POS session yet (or it ended): the sign-in card, without an error.
+        if (e.kind == ApiFailureKind.unreachable) connection = ConnectionStatus.unreachable;
+      }
+    }
+    stage = PosStage.signIn;
+    notifyListeners();
+  }
+
+  /// Sign-in code from the App: opens the tenant and register chosen there.
+  Future<void> openFromApp(String code) async {
+    final grant = await _run(() => api.exchange(code));
+    if (grant != null) {
+      await _started(grant);
+      return;
+    }
+    stage = PosStage.signIn;
+    notifyListeners();
   }
 
   Future<void> signIn(String email, String password) async {
-    final signed = await _run(() => api.signIn(email, password));
-    if (signed == null) return;
-    user = signed;
-    if (signed.jwt != null && !kIsWeb) api.client.bearerToken = signed.jwt;
-    await _afterSignIn();
+    final grant = await _run(() => api.signIn(email, password));
+    if (grant == null) return;
+    await _started(grant);
   }
 
-  Future<void> _afterSignIn() async {
+  Timer? _renewTimer;
+  Future<bool>? _renewing;
+
+  Future<void> _started(PosSessionGrant grant) async {
+    user = grant.user;
+    _scheduleRenewal(grant.expiresIn);
+    await _afterSignIn(environmentUuid: grant.environmentUuid, terminalUuid: grant.terminalUuid);
+  }
+
+  /// Renews the access token one minute before it expires, so requests rarely meet a 401.
+  void _scheduleRenewal(int expiresIn) {
+    _renewTimer?.cancel();
+    final seconds = expiresIn > 120 ? expiresIn - 60 : 60;
+    _renewTimer = Timer(Duration(seconds: seconds), () => unawaited(_renewSession()));
+  }
+
+  /// One renewal at a time. False when the POS session is over (sign in again) or the server
+  /// cannot be reached (tried again shortly).
+  Future<bool> _renewSession() => _renewing ??= _renew().whenComplete(() => _renewing = null);
+
+  Future<bool> _renew() async {
+    if (user == null) return false;
+    try {
+      final grant = await api.refresh();
+      user = grant.user;
+      _scheduleRenewal(grant.expiresIn);
+      return true;
+    } on ApiException catch (e) {
+      if (e.kind == ApiFailureKind.unreachable) {
+        _scheduleRenewal(90);
+        return false;
+      }
+      if (saleInDoubt) {
+        // Keep the screen: the operator signs in again and the same sale is checked or resent.
+        error = 'Your POS session ended. Sign in again to confirm the sale in progress.';
+        notifyListeners();
+        return false;
+      }
+      _endSession(message: 'Your POS session ended. Sign in again.');
+      return false;
+    }
+  }
+
+  Future<void> _afterSignIn({String? environmentUuid, String? terminalUuid}) async {
     final list = await _run(api.tenants);
     if (list == null) return;
     tenants = list;
-    if (list.length == 1) {
-      await selectTenant(list.first);
+    final preferred = environmentUuid == null
+        ? null
+        : list.where((t) => _sameUuid(t.uuid, environmentUuid)).firstOrNull;
+    if (preferred != null || list.length == 1) {
+      await selectTenant(preferred ?? list.first);
+      final chosen = terminalUuid == null
+          ? null
+          : terminals.where((t) => _sameUuid(t.uuid, terminalUuid)).firstOrNull;
+      if (chosen != null && stage == PosStage.terminal) await selectTerminal(chosen);
     } else {
       stage = PosStage.tenant;
       notifyListeners();
     }
   }
+
+  static bool _sameUuid(String a, String b) =>
+      a.replaceAll('-', '').toLowerCase() == b.replaceAll('-', '').toLowerCase();
 
   Future<void> selectTenant(TenantOption option) async {
     tenant = option;
@@ -160,10 +238,11 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Ends the operator session on this screen: the server revokes the token (and the web cookie),
-  /// and everything kept in memory (user, tenant, register, cart) is dropped. The cash session
-  /// stays open on the server for the next operator. Refused while a sale submit is in doubt, so
-  /// a sale is never lost. Local state is cleared even when the server cannot be reached.
+  /// Ends the POS session only: the server revokes it and drops its refresh cookie, and
+  /// everything kept in memory (user, tenant, register, cart) is dropped. The App session of the
+  /// same browser stays signed in. The cash session stays open on the server for the next
+  /// operator. Refused while a sale submit is in doubt, so a sale is never lost. Local state is
+  /// cleared even when the server cannot be reached.
   Future<bool> signOut() async {
     if (saleInDoubt) {
       error = 'A sale is still being confirmed. Wait for it before signing out.';
@@ -179,8 +258,20 @@ class PosController extends ChangeNotifier {
       // An expired session is already signed out on the server.
       if (e.kind != ApiFailureKind.unauthorized) failure = e.message;
     }
+    _endSession(
+      message: failure == null
+          ? null
+          : 'Signed out on this screen, but the server session could not be ended: $failure',
+    );
+    return true;
+  }
+
+  void _endSession({String? message}) {
+    _renewTimer?.cancel();
+    _renewTimer = null;
     _detachDevice();
     api.client.bearerToken = null;
+    api.client.refreshToken = null;
     api.client.environmentUuid = null;
     user = null;
     tenants = const [];
@@ -194,10 +285,9 @@ class PosController extends ChangeNotifier {
     payments.clear();
     pendingSale = null;
     busy = false;
-    error = failure == null ? null : 'Signed out on this screen, but the server session could not be ended: $failure';
+    error = message;
     stage = PosStage.signIn;
     notifyListeners();
-    return true;
   }
 
   void backToTerminals() {

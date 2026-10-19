@@ -37,7 +37,8 @@ class ApiException implements Exception {
 }
 
 /// Thin JSON client of the MNSCloud API. Authorization stays on the server: the client only
-/// carries the session (cookie on the web, Bearer token on installed apps) and the tenant header.
+/// carries the POS session (its own Bearer token, never the App cookie session) and the tenant
+/// header.
 class ApiClient {
   ApiClient({String? baseUrl, http.Client? client, this.timeout = const Duration(seconds: 20)})
       : baseUrl = (baseUrl == null || baseUrl.isEmpty) ? defaultApiBase() : baseUrl,
@@ -47,11 +48,22 @@ class ApiClient {
   final Duration timeout;
   final http.Client _http;
 
-  /// Bearer token of installed apps (never used on the web, where the cookie session applies).
+  /// Access token of the POS session (web and installed apps), kept only in memory.
   String? bearerToken;
+
+  /// Refresh token of installed apps, kept only in memory. The web keeps it as an HttpOnly cookie
+  /// scoped to `/api/v1/pos/auth`, which scripts cannot read.
+  String? refreshToken;
+
+  /// Renews the POS session after a 401; true when a new access token is in place. Requests are
+  /// repeated once after it, except device-signed ones (their counter must never be reused).
+  Future<bool> Function()? onSessionExpired;
 
   /// Active tenant (`X-Environment-UUID`).
   String? environmentUuid;
+
+  /// Web bundle (refresh token in an HttpOnly cookie) or installed app (refresh token in memory).
+  bool get isWebClient => isWebPlatform;
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final clean = path.startsWith('/') ? path.substring(1) : path;
@@ -66,23 +78,21 @@ class ApiClient {
     if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
     final env = environmentUuid;
     if (env != null && env.isNotEmpty) headers['X-Environment-UUID'] = env;
-    if (write) {
-      final csrf = readCsrfToken();
-      if (csrf != null) headers['X-CSRF-Token'] = csrf;
-    }
     if (idempotencyKey != null) headers['Idempotency-Key'] = idempotencyKey;
     headers['X-Client-Name'] = 'mnscloud-pos';
     return headers;
   }
 
   Future<dynamic> get(String path, [Map<String, String>? query]) =>
-      _send(() => _http.get(_uri(path, query), headers: _headers()));
+      _authorized(path, () => _send(() => _http.get(_uri(path, query), headers: _headers())));
 
-  Future<dynamic> post(String path, Object? body, {String? idempotencyKey}) => _send(() => _http.post(
-        _uri(path),
-        headers: _headers(write: true, idempotencyKey: idempotencyKey),
-        body: jsonEncode(body ?? const {}),
-      ));
+  Future<dynamic> post(String path, Object? body, {String? idempotencyKey}) => _authorized(
+      path,
+      () => _send(() => _http.post(
+            _uri(path),
+            headers: _headers(write: true, idempotencyKey: idempotencyKey),
+            body: jsonEncode(body ?? const {}),
+          )));
 
   /// Request with extra headers built from the exact URI and body text (device signatures).
   Future<dynamic> signed(
@@ -101,8 +111,23 @@ class ApiClient {
         : _http.post(uri, headers: all, body: text));
   }
 
-  Future<dynamic> put(String path, Object? body) => _send(
-      () => _http.put(_uri(path), headers: _headers(write: true), body: jsonEncode(body ?? const {})));
+  Future<dynamic> put(String path, Object? body) => _authorized(
+      path,
+      () => _send(
+          () => _http.put(_uri(path), headers: _headers(write: true), body: jsonEncode(body ?? const {}))));
+
+  /// A 401 is answered before any handler runs, so repeating the same request (same idempotency
+  /// key and payload) after renewing the session is safe. Session endpoints are never repeated.
+  Future<dynamic> _authorized(String path, Future<dynamic> Function() request) async {
+    try {
+      return await request();
+    } on ApiException catch (e) {
+      final renew = onSessionExpired;
+      if (e.status != 401 || renew == null || path.startsWith('pos/auth/')) rethrow;
+      if (!await renew()) rethrow;
+      return await request();
+    }
+  }
 
   Future<dynamic> _send(Future<http.Response> Function() request) async {
     http.Response response;

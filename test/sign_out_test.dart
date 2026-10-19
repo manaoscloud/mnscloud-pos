@@ -20,17 +20,18 @@ class SignOutApi extends PosApi {
 
 PosController signedIn(SignOutApi api) {
   final c = PosController(api);
-  c.user = SignedInUser(uuid: 'u', name: 'Operador', email: 'op@example.com', jwt: 'token');
+  c.user = SignedInUser(uuid: 'u', name: 'Operador', email: 'op@example.com');
   c.tenant = TenantOption('env', 'Loja', null);
   c.tenants = [c.tenant!];
   c.stage = PosStage.terminal;
   api.client.bearerToken = 'token';
+  api.client.refreshToken = 'refresh';
   api.client.environmentUuid = 'env';
   return c;
 }
 
 void main() {
-  test('sign out ends the server session and drops everything kept in memory', () async {
+  test('sign out ends the POS session and drops everything kept in memory', () async {
     final api = SignOutApi();
     final c = signedIn(api);
     expect(await c.signOut(), isTrue);
@@ -43,6 +44,7 @@ void main() {
     expect(c.session, isNull);
     expect(c.cart, isEmpty);
     expect(api.client.bearerToken, isNull);
+    expect(api.client.refreshToken, isNull);
     expect(api.client.environmentUuid, isNull);
     expect(c.error, isNull);
   });
