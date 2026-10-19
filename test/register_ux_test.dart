@@ -219,6 +219,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));
     await tester.pumpAndSettle();
     expect(find.text('Desconto acima do limite do caixa. Desconto máximo deste item: 1,20'), findsOneWidget);
+    final error = tester.widget<TextField>(find.widgetWithText(TextField, 'Desconto')).decoration!;
+    expect(error.errorMaxLines, greaterThan(1));
     expect(c.cart.single.discount.isZero, isTrue);
     await tester.enterText(find.widgetWithText(TextField, 'Desconto'), '1,00');
     await tester.tap(find.widgetWithText(FilledButton, 'Confirmar'));

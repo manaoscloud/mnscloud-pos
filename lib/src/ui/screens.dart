@@ -427,7 +427,14 @@ class _MoneyFieldState extends State<MoneyField> {
         controller: widget.controller,
         focusNode: _focus,
         autofocus: widget.autofocus,
-        decoration: InputDecoration(labelText: widget.label, errorText: widget.errorText, helperText: widget.helperText),
+        // Messages wrap: a phone must show the whole reason (e.g. the discount maximum).
+        decoration: InputDecoration(
+          labelText: widget.label,
+          errorText: widget.errorText,
+          helperText: widget.helperText,
+          errorMaxLines: 4,
+          helperMaxLines: 3,
+        ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
         onSubmitted: widget.onSubmitted,
@@ -1094,7 +1101,7 @@ class _RegisterDialogState extends State<RegisterDialog> {
                   else ...[
                     TextField(
                       controller: _reason,
-                      decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError),
+                      decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError, errorMaxLines: 3),
                     ),
                     for (final sale in _sales)
                       ListTile(
