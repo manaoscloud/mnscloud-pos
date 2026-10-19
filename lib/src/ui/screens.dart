@@ -231,7 +231,26 @@ class _SignInViewState extends State<SignInView> {
     return _CenteredCard(
       child: AutofillGroup(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('MNSCloud ${s.t('app')}', style: Theme.of(context).textTheme.headlineSmall),
+          ValueListenableBuilder(
+            valueListenable: widget.controller.brand,
+            builder: (context, brand, _) {
+              final logo = brand?.logoUrl;
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                if (logo != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Image.network(
+                      logo,
+                      key: const Key('brandLogo'),
+                      height: 56,
+                      alignment: Alignment.centerLeft,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                Text(brand?.title ?? 'MNSCloud ${s.t('app')}', style: Theme.of(context).textTheme.headlineSmall),
+              ]);
+            },
+          ),
           const SizedBox(height: 4),
           if (isWebPlatform) Text(s.t('webOnline'), style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 16),
