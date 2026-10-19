@@ -177,9 +177,9 @@ class S {
     'cancelSale': {'pt': 'Cancelar última venda', 'en': 'Cancel last sale', 'es': 'Cancelar última venta'},
     'reason': {'pt': 'Motivo', 'en': 'Reason', 'es': 'Motivo'},
     'webOnline': {
-      'pt': 'Versão Web: funciona apenas online; nada é guardado no navegador.',
-      'en': 'Web version: online only; nothing is stored in the browser.',
-      'es': 'Versión Web: solo en línea; nada se guarda en el navegador.',
+      'pt': 'Versão Web: funciona apenas online; nenhuma venda fica guardada no navegador.',
+      'en': 'Web version: online only; no sale is stored in the browser.',
+      'es': 'Versión Web: solo en línea; ninguna venta se guarda en el navegador.',
     },
     'switchTerminal': {'pt': 'Trocar caixa', 'en': 'Change register', 'es': 'Cambiar caja'},
     'signOut': {'pt': 'Sair', 'en': 'Sign out', 'es': 'Salir'},
@@ -210,9 +210,9 @@ class S {
     },
     'signOutQuestion': {'pt': 'Sair do PDV?', 'en': 'Sign out of the POS?', 'es': '¿Salir del TPV?'},
     'signOutHint': {
-      'pt': 'Sua sessão será encerrada neste dispositivo. Para voltar, entre de novo com e-mail e senha.',
-      'en': 'Your session ends on this device. Sign in again with e-mail and password to come back.',
-      'es': 'Su sesión se cerrará en este dispositivo. Para volver, ingrese de nuevo con correo y contraseña.',
+      'pt': 'Encerra somente a sessão do PDV neste dispositivo; o MNSCloud App continua conectado. Para voltar, entre de novo com e-mail e senha.',
+      'en': 'Only the POS session ends on this device; the MNSCloud App stays signed in. Sign in again with e-mail and password to come back.',
+      'es': 'Solo se cierra la sesión del TPV en este dispositivo; la MNSCloud App sigue conectada. Para volver, ingrese de nuevo con correo y contraseña.',
     },
     'signOutCart': {
       'pt': 'A venda em andamento será descartada.',
