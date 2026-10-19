@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/models.dart';
 import '../core/money.dart';
+import '../platform/scanner_support.dart';
 import '../platform/session.dart';
 import '../state/pos_controller.dart';
 import 'strings.dart';
@@ -447,6 +449,22 @@ class _SellingViewState extends State<SellingView> {
   final _focus = FocusNode();
   List<CatalogItem> _results = const [];
   Timer? _debounce;
+  bool _cameraScan = false;
+
+  @override
+  void initState() {
+    super.initState();
+    cameraScanSupported().then((ok) {
+      if (mounted && ok) setState(() => _cameraScan = true);
+    });
+  }
+
+  /// Reads one barcode with the camera and handles it like a code typed by a reader.
+  Future<void> _scanWithCamera() async {
+    final code = await showDialog<String>(context: context, builder: (_) => const CameraScanDialog());
+    if (code != null && code.isNotEmpty) await _onSubmitted(code);
+    _focus.requestFocus();
+  }
 
   @override
   void dispose() {
@@ -488,6 +506,7 @@ class _SellingViewState extends State<SellingView> {
       results: _results,
       onChanged: _onChanged,
       onSubmitted: _onSubmitted,
+      onScan: _cameraScan ? _scanWithCamera : null,
       onPick: (item) {
         widget.controller.addItem(item);
         _search.clear();
@@ -519,6 +538,7 @@ class _CatalogPane extends StatelessWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onPick,
+    this.onScan,
   });
   final TextEditingController search;
   final FocusNode focus;
@@ -526,6 +546,9 @@ class _CatalogPane extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final ValueChanged<CatalogItem> onPick;
+
+  /// Camera scanning, when this device supports it (null: keyboard-wedge reader only).
+  final VoidCallback? onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -537,7 +560,17 @@ class _CatalogPane extends StatelessWidget {
           controller: search,
           focusNode: focus,
           autofocus: true,
-          decoration: InputDecoration(prefixIcon: const Icon(Icons.qr_code_scanner), labelText: s.t('search')),
+          decoration: InputDecoration(
+            prefixIcon: onScan == null
+                ? const Icon(Icons.qr_code_scanner)
+                : IconButton(
+                    key: const Key('cameraScan'),
+                    tooltip: s.t('scanWithCamera'),
+                    icon: const Icon(Icons.photo_camera),
+                    onPressed: onScan,
+                  ),
+            labelText: s.t('search'),
+          ),
           onChanged: onChanged,
           onSubmitted: onSubmitted,
         ),
@@ -1168,6 +1201,78 @@ class SessionClosedDialog extends StatelessWidget {
         ]),
       ),
       actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(s.t('close')))],
+    );
+  }
+}
+
+/// Camera barcode reader (rear camera): returns the first product code it sees.
+class CameraScanDialog extends StatefulWidget {
+  const CameraScanDialog({super.key});
+
+  @override
+  State<CameraScanDialog> createState() => _CameraScanDialogState();
+}
+
+class _CameraScanDialogState extends State<CameraScanDialog> {
+  late final MobileScannerController _scanner;
+  bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    prepareCameraScanner();
+    _scanner = MobileScannerController(
+      facing: CameraFacing.back,
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      formats: const [
+        BarcodeFormat.ean13,
+        BarcodeFormat.ean8,
+        BarcodeFormat.upcA,
+        BarcodeFormat.upcE,
+        BarcodeFormat.code128,
+        BarcodeFormat.code39,
+        BarcodeFormat.itf2of5,
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _scanner.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_done) return;
+    final code = capture.barcodes.map((b) => b.rawValue?.trim() ?? '').firstWhere((v) => v.isNotEmpty, orElse: () => '');
+    if (code.isEmpty) return;
+    _done = true;
+    Navigator.pop(context, code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return AlertDialog(
+      title: Text(s.t('scanWithCamera')),
+      content: SizedBox(
+        width: 360,
+        height: 300,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: MobileScanner(
+            controller: _scanner,
+            onDetect: _onDetect,
+            errorBuilder: (context, error) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(s.t('cameraUnavailable'), textAlign: TextAlign.center),
+              ),
+            ),
+          ),
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel')))],
     );
   }
 }
