@@ -14,7 +14,9 @@ import '../offline/device_sync_api.dart' as device_api;
 import '../offline/p256.dart';
 import '../offline/sync_engine.dart';
 import '../fiscal/fiscal_device.dart';
-import '../platform/session.dart' show takeHandoffCode;
+import '../platform/session.dart' show isWebPlatform, takeHandoffCode;
+import '../platform/brand_dom.dart';
+import '../brand/brand.dart';
 import '../version/app_build_info.dart';
 
 enum ConnectionStatus { online, unreachable, unknown }
@@ -50,6 +52,23 @@ class PosController extends ChangeNotifier {
 
   /// The installed app may provision this terminal for offline operation.
   bool get canProvisionDevice => host != null && device == null && terminal?.offlineEnabled == true;
+
+  /// Brand of the host (web only); null keeps the MNSCloud defaults.
+  final ValueNotifier<Brand?> brand = ValueNotifier<Brand?>(null);
+
+  /// Loads the POS brand of the domain (Settings › Themes). Never blocks or fails the POS.
+  Future<void> loadBrand() async {
+    if (!isWebPlatform) return;
+    try {
+      final loaded = Brand.fromContext(await api.client.get('public/theme/context', {'app': 'pos'}));
+      if (loaded == null) return;
+      final favicon = loaded.faviconUrl;
+      if (favicon != null) applyFavicon(favicon);
+      brand.value = loaded;
+    } catch (_) {
+      // No brand: the MNSCloud defaults stay.
+    }
+  }
 
   PosStage stage = PosStage.signIn;
   ConnectionStatus connection = ConnectionStatus.unknown;

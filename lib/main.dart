@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'src/api/api_client.dart';
 import 'src/api/pos_api.dart';
+import 'src/brand/brand.dart';
 import 'src/offline/device_host.dart';
 import 'src/state/pos_controller.dart';
 import 'src/ui/screens.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
   final controller = PosController(PosApi(ApiClient()), host: host);
   AppLifecycleListener(onResume: controller.syncNow);
   runApp(PosApp(controller: controller));
+  controller.loadBrand();
   controller.restore();
 }
 
@@ -27,15 +29,23 @@ class PosApp extends StatelessWidget {
   final PosController controller;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'MNSCloud POS',
+  Widget build(BuildContext context) => ValueListenableBuilder<Brand?>(
+        valueListenable: controller.brand,
+        builder: (context, brand, _) => _app(brand),
+      );
+
+  Widget _app(Brand? brand) {
+    final seed = brand?.primaryColor ?? const Color(0xFF1565C0);
+    return MaterialApp(
+        title: brand?.title ?? 'MNSCloud POS',
         debugShowCheckedModeBanner: false,
         // Material widgets (text fields, dialogs) need their own strings for every supported
         // locale; without the delegates a pt/es browser renders them as grey error boxes.
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         supportedLocales: const [Locale('pt', 'BR'), Locale('en', 'US'), Locale('es', 'ES')],
-        theme: ThemeData(colorSchemeSeed: const Color(0xFF1565C0), useMaterial3: true),
-        darkTheme: ThemeData(colorSchemeSeed: const Color(0xFF1565C0), useMaterial3: true, brightness: Brightness.dark),
+        theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
+        darkTheme: ThemeData(colorSchemeSeed: seed, useMaterial3: true, brightness: Brightness.dark),
         home: PosHome(controller: controller),
       );
+  }
 }
