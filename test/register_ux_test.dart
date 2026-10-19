@@ -225,4 +225,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.cart.single.discount.toString(), '1.0000');
   });
+
+  testWidgets('without a camera scanner (desktop test host) the search keeps the reader icon only', (tester) async {
+    await phone(tester);
+    await tester.pumpWidget(PosApp(controller: selling(RegisterApi())));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cameraScan')), findsNothing);
+    expect(find.byIcon(Icons.qr_code_scanner), findsOneWidget);
+  });
 }

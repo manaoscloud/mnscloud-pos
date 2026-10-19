@@ -184,6 +184,12 @@ class S {
     'switchTerminal': {'pt': 'Trocar caixa', 'en': 'Change register', 'es': 'Cambiar caja'},
     'signOut': {'pt': 'Sair', 'en': 'Sign out', 'es': 'Salir'},
     'stock': {'pt': 'Estoque', 'en': 'Stock', 'es': 'Stock'},
+    'scanWithCamera': {'pt': 'Ler código com a câmera', 'en': 'Scan with the camera', 'es': 'Leer código con la cámara'},
+    'cameraUnavailable': {
+      'pt': 'Câmera indisponível. Permita o acesso à câmera ou use o leitor de código de barras.',
+      'en': 'Camera unavailable. Allow camera access or use the barcode reader.',
+      'es': 'Cámara no disponible. Permita el acceso a la cámara o use el lector de códigos.',
+    },
     'invalidAmount': {'pt': 'Valor inválido. Use o formato 1.234,56.', 'en': 'Invalid amount. Use the format 1,234.56.', 'es': 'Monto inválido. Use el formato 1.234,56.'},
     'discountMax': {'pt': 'Desconto máximo deste item', 'en': 'Maximum discount for this item', 'es': 'Descuento máximo de este artículo'},
     'supplies': {'pt': 'Suprimentos', 'en': 'Cash in', 'es': 'Ingresos'},
