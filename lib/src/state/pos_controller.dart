@@ -495,6 +495,9 @@ class PosController extends ChangeNotifier {
   /// was stored, so the retry can never become a second, different sale.
   bool get saleInDoubt => pendingSale != null;
 
+  /// A sale is being built or confirmed: the web cart lives in memory only, so nothing may reload now.
+  bool get saleInProgress => cart.isNotEmpty || payments.isNotEmpty || pendingSale != null;
+
   bool get canFinish => cart.isNotEmpty && total.isPositive && paid >= total && change <= cashPaid;
 
   Map<String, dynamic> _buildPayload() => {
