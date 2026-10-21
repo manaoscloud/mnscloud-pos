@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart';
 
@@ -55,6 +56,10 @@ class PosController extends ChangeNotifier {
 
   /// Brand of the host (web only); null keeps the MNSCloud defaults.
   final ValueNotifier<Brand?> brand = ValueNotifier<Brand?>(null);
+
+  /// Language chosen on the access screens; null follows the device. Kept in memory only: the web
+  /// POS stores nothing in the browser.
+  final ValueNotifier<Locale?> locale = ValueNotifier<Locale?>(null);
 
   /// Loads the POS brand of the domain (Settings › Themes). Never blocks or fails the POS.
   Future<void> loadBrand() async {

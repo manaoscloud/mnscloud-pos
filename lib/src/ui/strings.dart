@@ -11,6 +11,9 @@ class S {
     return S(const {'en', 'es'}.contains(code) ? code : 'pt');
   }
 
+  /// Language tag of the Themes login copy (`pt-BR`, `en-US`, `es-ES`).
+  String get locale => const {'pt': 'pt-BR', 'en': 'en-US', 'es': 'es-ES'}[lang]!;
+
   String t(String key) => (_strings[key]?[lang]) ?? (_strings[key]?['pt']) ?? key;
 
   /// Server or controller message (English) in the operator language. Matching ignores case and
@@ -70,6 +73,44 @@ class S {
 
   static const Map<String, Map<String, String>> _strings = {
     'app': {'pt': 'PDV', 'en': 'POS', 'es': 'TPV'},
+    // Access screens; Settings › Themes › Login do POS may replace the first six per language.
+    'accessEyebrow': {'pt': 'Acesso ao caixa', 'en': 'Checkout access', 'es': 'Acceso a la caja'},
+    'accessTitle': {'pt': 'Entre no seu caixa', 'en': 'Sign in to your register', 'es': 'Entra en tu caja'},
+    'accessSubtitle': {
+      'pt': 'Use o e-mail e a senha da sua conta MNSCloud.',
+      'en': 'Use the e-mail and password of your MNSCloud account.',
+      'es': 'Usa el correo y la contraseña de tu cuenta MNSCloud.',
+    },
+    'accessHeroTitle': {'pt': 'Seu caixa.\nPronto para vender.', 'en': 'Your register.\nReady to sell.', 'es': 'Tu caja.\nLista para vender.'},
+    'accessHeroText': {
+      'pt': 'Abra o caixa, registre vendas e receba pagamentos em um só lugar.',
+      'en': 'Open the register, ring up sales and take payments in one place.',
+      'es': 'Abre la caja, registra ventas y cobra en un solo lugar.',
+    },
+    'accessSupportLabel': {
+      'pt': 'Precisa de ajuda? Fale com o responsável pelo caixa',
+      'en': 'Need help? Contact your register manager',
+      'es': '¿Necesitas ayuda? Habla con el responsable de la caja',
+    },
+    'forgotPassword': {'pt': 'Esqueceu sua senha?', 'en': 'Forgot your password?', 'es': '¿Olvidaste tu contraseña?'},
+    'showPassword': {'pt': 'Mostrar senha', 'en': 'Show password', 'es': 'Mostrar contraseña'},
+    'hidePassword': {'pt': 'Ocultar senha', 'en': 'Hide password', 'es': 'Ocultar contraseña'},
+    'language': {'pt': 'Idioma', 'en': 'Language', 'es': 'Idioma'},
+    'systemLanguage': {'pt': 'Idioma do sistema', 'en': 'System language', 'es': 'Idioma del sistema'},
+    'privacy': {'pt': 'Privacidade', 'en': 'Privacy', 'es': 'Privacidad'},
+    'terms': {'pt': 'Termos de uso', 'en': 'Terms of use', 'es': 'Términos de uso'},
+    'signedInAs': {'pt': 'Conectado como', 'en': 'Signed in as', 'es': 'Conectado como'},
+    'chooseTenantHint': {
+      'pt': 'Selecione a empresa em que você vai vender.',
+      'en': 'Select the company you will sell for.',
+      'es': 'Seleccione la empresa para la que va a vender.',
+    },
+    'chooseTerminalHint': {
+      'pt': 'Selecione o caixa em que você vai vender agora.',
+      'en': 'Select the register you will sell on now.',
+      'es': 'Seleccione la caja en la que va a vender ahora.',
+    },
+    'linkError': {'pt': 'Não foi possível abrir o link.', 'en': 'The link could not be opened.', 'es': 'No se pudo abrir el enlace.'},
     'updateAvailable': {'pt': 'Nova versão disponível', 'en': 'New version available', 'es': 'Nueva versión disponible'},
     'updateImportant': {'pt': 'Atualização importante', 'en': 'Important update', 'es': 'Actualización importante'},
     'updateHelp': {

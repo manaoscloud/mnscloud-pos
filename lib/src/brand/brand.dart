@@ -3,12 +3,30 @@ import 'package:flutter/material.dart';
 /// Brand of the host for the POS (Settings › Themes › POS tab of the tenant domain); every field
 /// the POS tab leaves empty comes from the App brand. Null fields keep the MNSCloud defaults.
 class Brand {
-  const Brand({this.title, this.logoUrl, this.faviconUrl, this.primaryColor});
+  const Brand({this.title, this.logoUrl, this.faviconUrl, this.primaryColor, this.login = const {}});
 
   final String? title;
   final String? logoUrl;
   final String? faviconUrl;
   final Color? primaryColor;
+
+  /// `LoginAppearance` of the POS login (Settings › Themes › Login do POS): layout, appearance,
+  /// panel image, support/privacy/terms links and PT/EN/ES copy. Empty keeps the POS defaults.
+  final Map<String, dynamic> login;
+
+  /// Copy configured for [locale] (`pt-BR`, `en-US`, `es-ES`); null keeps the built-in text.
+  String? loginText(String locale, String key) {
+    final texts = login['texts'];
+    final value = texts is Map && texts[locale] is Map ? texts[locale][key] : null;
+    return value is String && value.trim().isNotEmpty ? value.trim() : null;
+  }
+
+  /// Links of the login are https only, never with credentials.
+  static String? safeLink(Object? value) {
+    if (value is! String) return null;
+    final uri = Uri.tryParse(value);
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty && uri.userInfo.isEmpty ? value : null;
+  }
 
   /// `data` of `GET /public/theme/context?app=pos`: `{ context: {...} | null }`.
   static Brand? fromContext(dynamic data) {
@@ -21,6 +39,7 @@ class Brand {
 
     return Brand(
       title: text(context['PageTitle']),
+      login: context['LoginAppearance'] is Map ? Map<String, dynamic>.from(context['LoginAppearance']) : const {},
       logoUrl: safeImageUrl(text(context['LogoUrl'])),
       faviconUrl: safeImageUrl(text(context['FaviconUrl'])),
       primaryColor: parseHexColor(text(context['PrimaryColor'])),
