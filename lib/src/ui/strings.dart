@@ -70,6 +70,15 @@ class S {
 
   static const Map<String, Map<String, String>> _strings = {
     'app': {'pt': 'PDV', 'en': 'POS', 'es': 'TPV'},
+    'updateAvailable': {'pt': 'Nova versão disponível', 'en': 'New version available', 'es': 'Nueva versión disponible'},
+    'updateImportant': {'pt': 'Atualização importante', 'en': 'Important update', 'es': 'Actualización importante'},
+    'updateHelp': {
+      'pt': 'Uma nova versão do PDV está pronta. A página será recarregada; faça isso entre uma venda e outra.',
+      'en': 'A new POS version is ready. The page will reload; do it between sales.',
+      'es': 'Una nueva versión del TPV está lista. La página se recargará; hágalo entre una venta y otra.',
+    },
+    'updateNow': {'pt': 'Atualizar agora', 'en': 'Update now', 'es': 'Actualizar ahora'},
+    'updateLater': {'pt': 'Depois', 'en': 'Later', 'es': 'Después'},
     'deviceModeHint': {
       'pt': 'Este dispositivo vende mesmo sem internet: vendas e caixa ficam salvos aqui e são sincronizados.',
       'en': 'This device sells even without internet: sales and cash are stored here and synchronized.',

@@ -7,6 +7,7 @@ import 'src/brand/brand.dart';
 import 'src/offline/device_host.dart';
 import 'src/state/pos_controller.dart';
 import 'src/ui/screens.dart';
+import 'src/version/app_update_overlay.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +46,12 @@ class PosApp extends StatelessWidget {
         supportedLocales: const [Locale('pt', 'BR'), Locale('en', 'US'), Locale('es', 'ES')],
         theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
         darkTheme: ThemeData(colorSchemeSeed: seed, useMaterial3: true, brightness: Brightness.dark),
+        // Web only: a newer release shows a notice, never in the middle of a sale.
+        builder: (context, child) => AppUpdateOverlay(
+          busy: () => controller.saleInProgress,
+          listenable: controller,
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: PosHome(controller: controller),
       );
   }
