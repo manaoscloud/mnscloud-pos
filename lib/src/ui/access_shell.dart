@@ -29,11 +29,8 @@ Future<void> openAccessLink(BuildContext context, String url) async {
 
 /// Language of the access screens, kept in memory by the controller.
 class AccessLanguageButton extends StatelessWidget {
-  const AccessLanguageButton({super.key, required this.controller, this.short = false});
+  const AccessLanguageButton({super.key, required this.controller});
   final PosController controller;
-
-  /// Phones show the language code (PT, EN, ES) so the brand fits on the same line.
-  final bool short;
 
   static const _names = {'pt': 'Português (BR)', 'en': 'English (US)', 'es': 'Español (ES)'};
   static const _locales = {'pt': Locale('pt', 'BR'), 'en': Locale('en', 'US'), 'es': Locale('es', 'ES')};
@@ -57,7 +54,7 @@ class AccessLanguageButton extends StatelessWidget {
           children: [
             const Icon(Icons.language, size: 19),
             const SizedBox(width: 8),
-            Text(short ? s.lang.toUpperCase() : _names[s.lang]!),
+            Text(_names[s.lang]!),
             const Icon(Icons.expand_more, size: 18),
           ],
         ),
@@ -130,119 +127,133 @@ class AccessShell extends StatelessWidget {
     final s = S.of(context);
     final brand = controller.brand.value;
     final color = brand?.primaryColor ?? _defaultBrandColor;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final split = constraints.maxWidth >= 900 && brand?.login['layout'] != 'compact';
-        final main = SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.all(split ? 40 : 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      if (split)
-                        const Spacer()
-                      else
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
+    final theme = Theme.of(context);
+    // Fields and the main button look the same as in Pulse and PhoneWeb.
+    return Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(9)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: color.computeLuminance() > .179 ? Colors.black : Colors.white,
+            minimumSize: const Size.fromHeight(50),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+          ),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final split = constraints.maxWidth >= 900 && brand?.login['layout'] != 'compact';
+          final main = SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
+                padding: EdgeInsets.all(split ? 40 : 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Same toolbar as Pulse: brand (phones only), language, sign-out.
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 16,
+                      runSpacing: 12,
+                      children: [
+                        if (!split)
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 270),
                             child: AccessBrand(brand: brand),
                           ),
-                        ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AccessLanguageButton(controller: controller, short: !split),
-                          if (onSignOut != null)
-                            IconButton(
-                              key: const Key('signOut'),
-                              tooltip: s.t('signOut'),
-                              onPressed: onSignOut,
-                              icon: const Icon(Icons.logout),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: split ? 76 : 32),
-                  Center(
-                    child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460), child: child),
-                  ),
-                  const SizedBox(height: 36),
-                  _footer(context, brand),
-                ],
-              ),
-            ),
-          ),
-        );
-        if (!split) return main;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [const Color(0xFF071A37), Color.lerp(const Color(0xFF06142B), color, .35)!],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    if (Brand.safeLink(brand?.login['heroImageUrl']) case final String image)
-                      Positioned.fill(
-                        child: Opacity(
-                          opacity: .16,
-                          child: Image.network(
-                            image,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        AccessLanguageButton(controller: controller),
+                        if (onSignOut != null)
+                          IconButton(
+                            key: const Key('signOut'),
+                            tooltip: s.t('signOut'),
+                            onPressed: onSignOut,
+                            icon: const Icon(Icons.logout),
                           ),
-                        ),
-                      ),
-                    const Positioned.fill(child: CustomPaint(painter: _Orbits())),
-                    SingleChildScrollView(
-                      padding: const EdgeInsets.all(56),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AccessBrand(brand: brand, onDark: true),
-                          const SizedBox(height: 110),
-                          Text(
-                            accessText(context, brand, 'eyebrow').toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 2),
-                          ),
-                          const SizedBox(height: 24),
-                          Text(
-                            accessText(context, brand, 'heroTitle'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 52,
-                              fontWeight: FontWeight.w800,
-                              height: 1.12,
-                              letterSpacing: -2,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                          Text(
-                            accessText(context, brand, 'heroText'),
-                            style: const TextStyle(color: Colors.white, fontSize: 19, height: 1.6),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
+                    SizedBox(height: split ? 76 : 48),
+                    Center(
+                      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460), child: child),
+                    ),
+                    const SizedBox(height: 36),
+                    _footer(context, brand),
                   ],
                 ),
               ),
             ),
-            Expanded(child: main),
-          ],
-        );
-      },
+          );
+          if (!split) return main;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [const Color(0xFF071A37), Color.lerp(const Color(0xFF06142B), color, .35)!],
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      if (Brand.safeLink(brand?.login['heroImageUrl']) case final String image)
+                        Positioned.fill(
+                          child: Opacity(
+                            opacity: .16,
+                            child: Image.network(
+                              image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                      const Positioned.fill(child: CustomPaint(painter: _Orbits())),
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(56),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AccessBrand(brand: brand, onDark: true),
+                            const SizedBox(height: 110),
+                            Text(
+                              accessText(context, brand, 'eyebrow').toUpperCase(),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 2),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              accessText(context, brand, 'heroTitle'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 52,
+                                fontWeight: FontWeight.w800,
+                                height: 1.12,
+                                letterSpacing: -2,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            Text(
+                              accessText(context, brand, 'heroText'),
+                              style: const TextStyle(color: Colors.white, fontSize: 19, height: 1.6),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(child: main),
+            ],
+          );
+        },
+      ),
     );
   }
 
