@@ -10,6 +10,7 @@ import '../core/money.dart';
 import '../platform/scanner_support.dart';
 import '../platform/session.dart';
 import '../state/pos_controller.dart';
+import 'access_shell.dart';
 import 'strings.dart';
 
 String fmt(Decimal value) => value.format();
@@ -39,6 +40,24 @@ class PosHome extends StatelessWidget {
             PosStage.openSession => OpenSessionView(controller: controller),
             PosStage.selling => SellingView(controller: controller),
           };
+          // Sign-in, company and register follow Settings › Themes › Login do POS.
+          if (const {PosStage.signIn, PosStage.tenant, PosStage.terminal}.contains(controller.stage)) {
+            return Scaffold(
+              body: SafeArea(
+                child: AccessShell(
+                  controller: controller,
+                  onSignOut: controller.stage == PosStage.signIn || controller.busy
+                      ? null
+                      : () => confirmSignOut(context, controller),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (controller.error != null)
+                      Padding(padding: const EdgeInsets.only(bottom: 20), child: ErrorBanner(controller: controller)),
+                    body,
+                  ]),
+                ),
+              ),
+            );
+          }
           return Scaffold(
             appBar: controller.stage == PosStage.signIn ? null : PosStatusBar(controller: controller),
             body: SafeArea(
@@ -215,6 +234,7 @@ class SignInView extends StatefulWidget {
 class _SignInViewState extends State<SignInView> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  bool _showPassword = false;
 
   @override
   void dispose() {
@@ -225,60 +245,142 @@ class _SignInViewState extends State<SignInView> {
 
   void _submit() => widget.controller.signIn(_email.text.trim(), _password.text);
 
+  /// The POS uses the App account: recovery is the App page of the same domain (web only).
+  String get _recoveryUrl => Uri.base.resolve('/auth/forgot-password').toString();
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return _CenteredCard(
-      child: AutofillGroup(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          ValueListenableBuilder(
-            valueListenable: widget.controller.brand,
-            builder: (context, brand, _) {
-              final logo = brand?.logoUrl;
-              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                if (logo != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Image.network(
-                      logo,
-                      key: const Key('brandLogo'),
-                      height: 56,
-                      alignment: Alignment.centerLeft,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                    ),
-                  ),
-                Text(brand?.title ?? 'MNSCloud ${s.t('app')}', style: Theme.of(context).textTheme.headlineSmall),
-              ]);
-            },
+    final brand = widget.controller.brand.value;
+    final brandColor = brand?.primaryColor ?? const Color(0xFF1264ED);
+    return AutofillGroup(
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AccessHeading(
+          eyebrow: accessText(context, brand, 'eyebrow'),
+          title: accessText(context, brand, 'title'),
+          subtitle: accessText(context, brand, 'subtitle'),
+        ),
+        TextField(
+          key: const Key('signInEmail'),
+          controller: _email,
+          decoration: InputDecoration(
+            labelText: s.t('email'),
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.mail_outline),
           ),
-          const SizedBox(height: 4),
-          if (isWebPlatform) Text(s.t('webOnline'), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _email,
-            decoration: InputDecoration(labelText: s.t('email')),
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          key: const Key('signInPassword'),
+          controller: _password,
+          decoration: InputDecoration(
+            labelText: s.t('password'),
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              key: const Key('togglePassword'),
+              tooltip: _showPassword ? s.t('hidePassword') : s.t('showPassword'),
+              onPressed: () => setState(() => _showPassword = !_showPassword),
+              icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+            ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _password,
-            decoration: InputDecoration(labelText: s.t('password')),
-            obscureText: true,
-            autofillHints: const [AutofillHints.password],
-            onSubmitted: (_) => _submit(),
-          ),
+          obscureText: !_showPassword,
+          enableSuggestions: false,
+          autocorrect: false,
+          autofillHints: const [AutofillHints.password],
+          onSubmitted: (_) => _submit(),
+        ),
+        if (isWebPlatform)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const Key('forgotPassword'),
+              onPressed: () => openAccessLink(context, _recoveryUrl),
+              child: Text(s.t('forgotPassword')),
+            ),
+          )
+        else
           const SizedBox(height: 20),
-          FilledButton(
-            onPressed: widget.controller.busy ? null : _submit,
-            child: widget.controller.busy
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text(s.t('signIn')),
+        const SizedBox(height: 8),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(50),
+            backgroundColor: brandColor,
+            foregroundColor: brandColor.computeLuminance() > .179 ? Colors.black : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
           ),
-        ]),
+          onPressed: widget.controller.busy ? null : _submit,
+          child: widget.controller.busy
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(s.t('signIn')),
+        ),
+        if (isWebPlatform) ...[
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.wifi, size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(child: Text(s.t('webOnline'), style: Theme.of(context).textTheme.bodySmall)),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+/// Signed-in operator, shown above the company and register choices.
+class _SignedInAs extends StatelessWidget {
+  const _SignedInAs({required this.controller});
+  final PosController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = controller.user;
+    if (user == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Text(
+        '${S.of(context).t('signedInAs')} ${user.email}',
+        style: Theme.of(context).textTheme.bodySmall,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
+}
+
+/// One company or register choice of the access screens.
+class _AccessChoice extends StatelessWidget {
+  const _AccessChoice({required this.icon, required this.title, this.subtitle, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          minVerticalPadding: 14,
+          leading: Icon(icon),
+          title: Text(title),
+          subtitle: subtitle == null ? null : Text(subtitle!),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+      );
 }
 
 class TenantView extends StatelessWidget {
@@ -288,19 +390,21 @@ class TenantView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return _CenteredCard(
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(s.t('chooseTenant'), style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        for (final t in controller.tenants)
-          ListTile(
-            leading: const Icon(Icons.apartment),
-            title: Text(t.name.isEmpty ? t.uuid : t.name),
-            subtitle: t.code == null ? null : Text(t.code!),
-            onTap: () => controller.selectTenant(t),
-          ),
-      ]),
-    );
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _SignedInAs(controller: controller),
+      AccessHeading(
+        eyebrow: accessText(context, controller.brand.value, 'eyebrow'),
+        title: s.t('chooseTenant'),
+        subtitle: s.t('chooseTenantHint'),
+      ),
+      for (final t in controller.tenants)
+        _AccessChoice(
+          icon: Icons.apartment,
+          title: t.name.isEmpty ? t.uuid : t.name,
+          subtitle: t.code,
+          onTap: () => controller.selectTenant(t),
+        ),
+    ]);
   }
 }
 
@@ -311,20 +415,22 @@ class TerminalView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return _CenteredCard(
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(s.t('chooseTerminal'), style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        if (controller.terminals.isEmpty) Text(s.t('noTerminals')),
-        for (final t in controller.terminals)
-          ListTile(
-            leading: Icon(t.openSessionUuid != null ? Icons.lock_open : Icons.point_of_sale),
-            title: Text(t.name),
-            subtitle: Text('${t.companyName} · ${t.locationName}'),
-            onTap: () => controller.selectTerminal(t),
-          ),
-      ]),
-    );
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _SignedInAs(controller: controller),
+      AccessHeading(
+        eyebrow: controller.tenant?.name ?? accessText(context, controller.brand.value, 'eyebrow'),
+        title: s.t('chooseTerminal'),
+        subtitle: s.t('chooseTerminalHint'),
+      ),
+      if (controller.terminals.isEmpty) Text(s.t('noTerminals')),
+      for (final t in controller.terminals)
+        _AccessChoice(
+          icon: t.openSessionUuid != null ? Icons.lock_open : Icons.point_of_sale,
+          title: t.name,
+          subtitle: '${t.companyName} · ${t.locationName}',
+          onTap: () => controller.selectTerminal(t),
+        ),
+    ]);
   }
 }
 

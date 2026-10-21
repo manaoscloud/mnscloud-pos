@@ -40,3 +40,14 @@ Critical updates: a release that fixes a serious problem sets `minimumVersion` i
 `web/update-policy.json` (usually to its own version, in the same PR). `mnscloud-webapps` copies it
 into `build.json`; pages running below it get an "important update" notice without the postpone
 action, still only between sales. Keep it `null` for regular releases.
+
+## Access screens and Themes
+
+Sign-in, company and register screens (`lib/src/ui/access_shell.dart`) follow the domain theme:
+`GET /public/theme/context?app=pos` gives the POS brand (title, logo, favicon, color; empty POS
+fields inherit the App) and `LoginAppearance` from Settings › Themes › Login do POS: split or
+compact layout, light/dark/system appearance, panel image, https support/privacy/terms links and
+PT/EN/ES copy (empty copy uses the built-in POS texts). Wide screens show the brand panel beside the
+form; phones show the brand above it. The language chosen there is kept in memory only, and
+"Forgot your password?" (web) opens the App recovery page of the same domain, since the POS signs in
+with the App account. There is no sign-up and no "remember me".
