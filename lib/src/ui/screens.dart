@@ -252,7 +252,6 @@ class _SignInViewState extends State<SignInView> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final brand = widget.controller.brand.value;
-    final brandColor = brand?.primaryColor ?? const Color(0xFF1264ED);
     return AutofillGroup(
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AccessHeading(
@@ -263,11 +262,7 @@ class _SignInViewState extends State<SignInView> {
         TextField(
           key: const Key('signInEmail'),
           controller: _email,
-          decoration: InputDecoration(
-            labelText: s.t('email'),
-            border: const OutlineInputBorder(),
-            suffixIcon: const Icon(Icons.mail_outline),
-          ),
+          decoration: InputDecoration(labelText: s.t('email')),
           keyboardType: TextInputType.emailAddress,
           autofillHints: const [AutofillHints.email],
           textInputAction: TextInputAction.next,
@@ -279,7 +274,6 @@ class _SignInViewState extends State<SignInView> {
           controller: _password,
           decoration: InputDecoration(
             labelText: s.t('password'),
-            border: const OutlineInputBorder(),
             suffixIcon: IconButton(
               key: const Key('togglePassword'),
               tooltip: _showPassword ? s.t('hidePassword') : s.t('showPassword'),
@@ -306,12 +300,6 @@ class _SignInViewState extends State<SignInView> {
           const SizedBox(height: 20),
         const SizedBox(height: 8),
         FilledButton(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            backgroundColor: brandColor,
-            foregroundColor: brandColor.computeLuminance() > .179 ? Colors.black : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-          ),
           onPressed: widget.controller.busy ? null : _submit,
           child: widget.controller.busy
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
