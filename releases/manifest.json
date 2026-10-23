@@ -3,14 +3,14 @@
   "repository": "manaoscloud/mnscloud-pos",
   "channels": {
     "stable": {
-      "version": "1.0.14",
-      "ref": "v1.0.14",
-      "releasedAt": "2026-10-21T17:53:28Z",
+      "version": "1.0.15",
+      "ref": "v1.0.15",
+      "releasedAt": "2026-10-23T14:53:41Z",
       "minimumVersion": "1.0.0",
       "artifact": {
-        "name": "mnscloud-pos-web-v1.0.14.tar.gz",
-        "sha256": "073cab3f17a25fbf195d33f1559236ed04a0e53485dead35d458b801c5d3da29",
-        "sizeBytes": 14178808,
+        "name": "mnscloud-pos-web-v1.0.15.tar.gz",
+        "sha256": "b71a25d0006e46aa564b8438e3052626cd2406db8ddd75a0d29721449e6843c7",
+        "sizeBytes": 14178720,
         "contentType": "application/gzip"
       }
     }
