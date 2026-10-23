@@ -121,6 +121,19 @@ void main() {
     expect(cents('7.505'), 751);
   });
 
+  test('alphanumeric CNPJ (NT 2025.001) gives the same access key as the API engine', () {
+    final key = buildAccessKey(
+        state: 'AM', issuedAt: DateTime.utc(2026, 10, 18, 15), cnpj: '12.abc.345/01de-35', model: '65', series: 2, number: 500,
+        emissionType: 9, code: '12345678');
+    expect(key, '13261012ABC34501DE35650020000005009123456789');
+    expect(normalizeTaxId('12.abc.345/01de-35'), '12ABC34501DE35');
+    expect(
+        () => buildAccessKey(
+            state: 'AM', issuedAt: DateTime.utc(2026), cnpj: '12ABC34501DEAB', model: '65', series: 1, number: 1,
+            emissionType: 1, code: '12345678'),
+        throwsArgumentError);
+  });
+
   test('rule selection and taxes follow the server rules', () {
     final general = rule({'FruUUID': 'A' * 32});
     final ncm = rule({'FruUUID': 'C' * 32, 'FruTaxRegime': 'normal', 'FruNcmPrefix': '2202', 'FruIcmsCst': '00', 'FruIcmsRate': '25', 'FruFcpRate': '2'});

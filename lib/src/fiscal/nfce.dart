@@ -33,11 +33,15 @@ String fiscalDateTime(DateTime at, String state) {
   return '${iso.substring(0, 19)}$offset';
 }
 
+/// CPF/CNPJ with uppercase letters and digits only: the CNPJ is alphanumeric since 2026-07-01.
+String normalizeTaxId(Object? value) => '${value ?? ''}'.toUpperCase().replaceAll(RegExp(r'[^0-9A-Z]'), '');
+
 String accessKeyCheckDigit(String key43) {
   var sum = 0;
   var weight = 2;
+  // ASCII - 48: digits keep their value, letters of an alphanumeric CNPJ count too (NT 2025.001).
   for (var i = key43.length - 1; i >= 0; i--) {
-    sum += int.parse(key43[i]) * weight;
+    sum += (key43.codeUnitAt(i) - 48) * weight;
     weight = weight == 9 ? 2 : weight + 1;
   }
   final remainder = sum % 11;
@@ -56,8 +60,8 @@ String buildAccessKey({
 }) {
   final cUF = stateCodes[state];
   if (cUF == null) throw ArgumentError('Unknown issuer state: $state');
-  final digits = cnpj.replaceAll(RegExp(r'\D'), '');
-  if (digits.length != 14) throw ArgumentError('Issuer CNPJ must have 14 digits');
+  final digits = normalizeTaxId(cnpj);
+  if (!RegExp(r'^[0-9A-Z]{12}[0-9]{2}$').hasMatch(digits)) throw ArgumentError('Issuer CNPJ must have 14 characters');
   final local = fiscalDateTime(issuedAt, state);
   final yymm = '${local.substring(2, 4)}${local.substring(5, 7)}';
   final key43 = '$cUF$yymm$digits${model.padLeft(2, '0')}${'$series'.padLeft(3, '0')}${'$number'.padLeft(9, '0')}'
@@ -380,7 +384,7 @@ BuiltNfce buildInfNFe(NfceInput input) {
   ].join();
   final issuer = input.issuer;
   final emit = [
-    tag('CNPJ', _digits(issuer['document'])),
+    tag('CNPJ', normalizeTaxId(issuer['document'])),
     tag('xNome', fiscalText(issuer['legalName'] ?? issuer['name'], 60)),
     tag('xFant', fiscalText(issuer['name'], 60).isEmpty ? null : fiscalText(issuer['name'], 60)),
     '<enderEmit>${[
