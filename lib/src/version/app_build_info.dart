@@ -1,5 +1,5 @@
 /// Stamped from pubspec.yaml by scripts/release-pos.sh on every release.
-const appBuildInfo = AppBuildInfo(product: "mnscloud-pos", version: "1.0.18");
+const appBuildInfo = AppBuildInfo(product: "mnscloud-pos", version: "1.0.20");
 
 class AppBuildInfo {
   const AppBuildInfo({required this.product, required this.version});
