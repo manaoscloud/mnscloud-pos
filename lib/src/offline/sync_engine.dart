@@ -96,53 +96,65 @@ class SyncEngine {
     while (true) {
       final due = store.dueOperations(_clock().millisecondsSinceEpoch, limit: 50);
       if (due.isEmpty) return;
-      Map<String, dynamic> response;
-      try {
-        response = await transport.push([
-          for (final e in due) {'operation': jsonDecode(e.operation), 'hash': e.hash},
-        ]);
-      } catch (error) {
-        for (final e in due) {
-          store.markOperation(e.operationUuid, 'retry',
-              error: error.toString(), retryAtMs: _retryAt(e.attempts));
-        }
-        report.retried += due.length;
-        throw SyncUnreachable(error);
-      }
-      final results = {
-        for (final r in (response['results'] as List? ?? const []))
-          if (r is Map && r['operationUUID'] != null) _key(r['operationUUID'].toString()): r.cast<String, dynamic>(),
-      };
+      final results = _resultsByKey(await _pushBatch(due, report));
       var progressed = false;
       for (final e in due) {
-        final r = results[_key(e.operationUuid)];
-        final status = r?['status']?.toString() ?? 'RETRY';
-        final result = r?['result'] == null ? null : jsonEncode(r!['result']);
-        switch (status) {
-          case 'ACCEPTED':
-            store.markOperation(e.operationUuid, 'done', result: result);
-            report.applied++;
-            progressed = true;
-          case 'CONFLICT':
-            store.markOperation(e.operationUuid, 'conflict', result: result);
-            report.conflicts++;
-            progressed = true;
-          case 'DUPLICATE':
-            final original = (r?['result'] as Map?)?['status']?.toString().toLowerCase();
-            final mapped = original == 'rejected' ? 'rejected' : (original == 'conflict' ? 'conflict' : 'done');
-            store.markOperation(e.operationUuid, mapped, result: result, error: r?['error']?.toString());
-            progressed = true;
-          case 'REJECTED':
-            store.markOperation(e.operationUuid, 'rejected', result: result, error: r?['error']?.toString());
-            report.rejected++;
-            progressed = true;
-          default:
-            store.markOperation(e.operationUuid, 'retry', error: r?['error']?.toString(), retryAtMs: _retryAt(e.attempts));
-            report.retried++;
-        }
+        if (_applyResult(e, results[_key(e.operationUuid)], report)) progressed = true;
       }
       if (!progressed) return;
     }
+  }
+
+  /// Pushes one batch; an unreachable API puts every operation of the batch back in retry.
+  Future<Map<String, dynamic>> _pushBatch(List<OutboxEntry> due, SyncReport report) async {
+    try {
+      return await transport.push([
+        for (final e in due) {'operation': jsonDecode(e.operation), 'hash': e.hash},
+      ]);
+    } catch (error) {
+      for (final e in due) {
+        store.markOperation(e.operationUuid, 'retry', error: error.toString(), retryAtMs: _retryAt(e.attempts));
+      }
+      report.retried += due.length;
+      throw SyncUnreachable(error);
+    }
+  }
+
+  static Map<String, Map<String, dynamic>> _resultsByKey(Map<String, dynamic> response) => {
+        for (final r in (response['results'] as List? ?? const []))
+          if (r is Map && r['operationUUID'] != null) _key(r['operationUUID'].toString()): r.cast<String, dynamic>(),
+      };
+
+  /// Records the server answer for one operation; true when the operation left the queue.
+  bool _applyResult(OutboxEntry e, Map<String, dynamic>? r, SyncReport report) {
+    final status = r?['status']?.toString() ?? 'RETRY';
+    final result = r?['result'] == null ? null : jsonEncode(r!['result']);
+    final error = r?['error']?.toString();
+    switch (status) {
+      case 'ACCEPTED':
+        store.markOperation(e.operationUuid, 'done', result: result);
+        report.applied++;
+      case 'CONFLICT':
+        store.markOperation(e.operationUuid, 'conflict', result: result);
+        report.conflicts++;
+      case 'DUPLICATE':
+        store.markOperation(e.operationUuid, _duplicateState(r), result: result, error: error);
+      case 'REJECTED':
+        store.markOperation(e.operationUuid, 'rejected', result: result, error: error);
+        report.rejected++;
+      default:
+        store.markOperation(e.operationUuid, 'retry', error: error, retryAtMs: _retryAt(e.attempts));
+        report.retried++;
+        return false;
+    }
+    return true;
+  }
+
+  /// A duplicate keeps the state the server recorded for the original operation.
+  static String _duplicateState(Map<String, dynamic>? r) {
+    final original = (r?['result'] as Map?)?['status']?.toString().toLowerCase();
+    if (original == 'rejected' || original == 'conflict') return original!;
+    return 'done';
   }
 
   int _retryAt(int attempts) => _clock().add(backoff(attempts)).millisecondsSinceEpoch;

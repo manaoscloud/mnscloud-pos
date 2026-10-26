@@ -138,31 +138,37 @@ class ApiClient {
     } catch (_) {
       throw ApiException(ApiFailureKind.unreachable, 'The server cannot be reached.');
     }
-    dynamic decoded;
-    if (response.body.isNotEmpty) {
-      try {
-        decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      } catch (_) {
-        decoded = null;
-      }
-    }
+    final decoded = _decode(response);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded is Map ? decoded['data'] : decoded;
     }
-    final body = decoded is Map ? decoded : const {};
-    final message = (body['error'] ?? body['detail'] ?? 'Request failed (${response.statusCode}).').toString();
+    throw _failure(response.statusCode, decoded is Map ? decoded : const {});
+  }
+
+  /// JSON body, or null when it is empty or not JSON.
+  static dynamic _decode(http.Response response) {
+    if (response.body.isEmpty) return null;
+    try {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static ApiException _failure(int status, Map body) {
+    final message = (body['error'] ?? body['detail'] ?? 'Request failed ($status).').toString();
     final code = body['code']?.toString();
-    final fields = (body['fields'] is List) ? (body['fields'] as List).map((f) => f.toString()).toList() : <String>[];
-    if (response.statusCode >= 500 || response.statusCode == 502 || response.statusCode == 503 || response.statusCode == 504) {
+    if (status >= 500) {
       // A gateway error may hide a committed write: the caller checks before retrying.
-      throw ApiException(ApiFailureKind.unreachable, message, status: response.statusCode, code: code);
+      return ApiException(ApiFailureKind.unreachable, message, status: status, code: code);
     }
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      throw ApiException(ApiFailureKind.unauthorized, message, status: response.statusCode, code: code);
+    if (status == 401 || status == 403) {
+      return ApiException(ApiFailureKind.unauthorized, message, status: status, code: code);
     }
-    if (response.statusCode == 402) {
-      throw ApiException(ApiFailureKind.notContracted, message, status: response.statusCode, code: code);
+    if (status == 402) {
+      return ApiException(ApiFailureKind.notContracted, message, status: status, code: code);
     }
-    throw ApiException(ApiFailureKind.rejected, message, status: response.statusCode, code: code, fields: fields);
+    final fields = (body['fields'] is List) ? (body['fields'] as List).map((f) => f.toString()).toList() : <String>[];
+    return ApiException(ApiFailureKind.rejected, message, status: status, code: code, fields: fields);
   }
 }

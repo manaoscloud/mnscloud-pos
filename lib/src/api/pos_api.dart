@@ -189,16 +189,23 @@ class PosApi {
         return SubmitOutcome.saved(PosSaleResult.fromJson((data as Map).cast<String, dynamic>()));
       } on ApiException catch (e) {
         if (!e.outcomeUnknown) rethrow;
-        try {
-          final existing = await sale(uuid);
-          if (existing != null) return SubmitOutcome.saved(existing);
-        } on ApiException catch (check) {
-          if (!check.outcomeUnknown) rethrow;
-          return SubmitOutcome.unknown();
-        }
+        final known = await _readBack(uuid);
+        if (known != null) return known;
       }
     }
     return SubmitOutcome.unknown();
+  }
+
+  /// After an unknown outcome: the saved sale, an unknown outcome when the check itself is lost, or
+  /// null when the server never saw the sale (the caller resends the identical payload).
+  Future<SubmitOutcome?> _readBack(String uuid) async {
+    try {
+      final existing = await sale(uuid);
+      return existing == null ? null : SubmitOutcome.saved(existing);
+    } on ApiException catch (check) {
+      if (!check.outcomeUnknown) rethrow;
+      return SubmitOutcome.unknown();
+    }
   }
 
   Future<PosSaleResult> cancelSale(String uuid, String reason) async =>
