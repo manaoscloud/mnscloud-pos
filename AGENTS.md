@@ -12,7 +12,7 @@
 
 MNSCloud POS (PDV/TPV) is a public Flutter client for the MNSCloud point of sale: the web version
 (online only, served by mnscloud-webapps at `/pos/`) and installed apps (Android, iOS, Windows,
-macOS, Linux) that will also sell offline within a server-issued authorization.
+macOS, Linux) that also sell offline within a server-issued authorization (`docs/capabilities.md`).
 
 ## Public Client Boundary
 
