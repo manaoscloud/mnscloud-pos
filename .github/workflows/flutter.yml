@@ -67,3 +67,10 @@ jobs:
           channel: stable
       - run: flutter build macos --release
       - run: flutter build ios --release --no-codesign
+
+  sonarcloud:
+    # SonarQube Cloud CI analysis (Dart is not covered by automatic analysis); shared and pinned in
+    # mnscloud-runtime-kit. Skipped with a notice while SONAR_TOKEN is not available.
+    uses: manaoscloud/mnscloud-runtime-kit/.github/workflows/sonarcloud-dart.yml@main
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
