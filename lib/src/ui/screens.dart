@@ -42,38 +42,40 @@ class PosHome extends StatelessWidget {
           };
           // Sign-in, company and register follow Settings › Themes › Login do POS.
           if (const {PosStage.signIn, PosStage.tenant, PosStage.terminal}.contains(controller.stage)) {
-            return Scaffold(
-              body: SafeArea(
-                child: AccessShell(
-                  controller: controller,
-                  onSignOut: controller.stage == PosStage.signIn || controller.busy
-                      ? null
-                      : () => confirmSignOut(context, controller),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    if (controller.error != null)
-                      Padding(padding: const EdgeInsets.only(bottom: 20), child: ErrorBanner(controller: controller)),
-                    body,
-                  ]),
-                ),
-              ),
-            );
+            return _accessScaffold(context, body);
           }
-          return Scaffold(
-            appBar: controller.stage == PosStage.signIn ? null : PosStatusBar(controller: controller),
-            body: SafeArea(
-              child: Column(children: [
-                if (controller.error != null) ErrorBanner(controller: controller),
-                if (controller.syncMessage != null)
-                  MaterialBanner(
-                    leading: const Icon(Icons.sync_problem),
-                    content: Text(controller.syncMessage!),
-                    actions: [TextButton(onPressed: controller.syncNow, child: Text(S.of(context).t('syncNow')))],
-                  ),
-                Expanded(child: body),
-              ]),
-            ),
-          );
+          return _workScaffold(context, body);
         },
+      );
+
+  Widget _accessScaffold(BuildContext context, Widget body) => Scaffold(
+        body: SafeArea(
+          child: AccessShell(
+            controller: controller,
+            onSignOut: controller.stage == PosStage.signIn || controller.busy ? null : () => confirmSignOut(context, controller),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (controller.error != null)
+                Padding(padding: const EdgeInsets.only(bottom: 20), child: ErrorBanner(controller: controller)),
+              body,
+            ]),
+          ),
+        ),
+      );
+
+  Widget _workScaffold(BuildContext context, Widget body) => Scaffold(
+        appBar: controller.stage == PosStage.signIn ? null : PosStatusBar(controller: controller),
+        body: SafeArea(
+          child: Column(children: [
+            if (controller.error != null) ErrorBanner(controller: controller),
+            if (controller.syncMessage != null)
+              MaterialBanner(
+                leading: const Icon(Icons.sync_problem),
+                content: Text(controller.syncMessage!),
+                actions: [TextButton(onPressed: controller.syncNow, child: Text(S.of(context).t('syncNow')))],
+              ),
+            Expanded(child: body),
+          ]),
+        ),
       );
 }
 
@@ -91,7 +93,6 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
     final scheme = Theme.of(context).colorScheme;
     final online = controller.connection != ConnectionStatus.unreachable;
     final terminal = controller.terminal;
-    final session = controller.session;
     return AppBar(
       titleSpacing: 16,
       title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -101,37 +102,13 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          [
-            if (terminal != null) terminal.companyName,
-            if (controller.tenant != null) controller.tenant!.name,
-            if (controller.user != null) controller.user!.name.isNotEmpty ? controller.user!.name : controller.user!.email,
-            if (session != null && session.isOpen) '${s.t('sales')}: ${session.saleCount}',
-          ].join(' · '),
+          _context(s),
           style: Theme.of(context).textTheme.bodySmall,
           overflow: TextOverflow.ellipsis,
         ),
       ]),
       actions: [
-        if (controller.deviceMode) ...[
-          Tooltip(
-            message: s.t('deviceModeHint'),
-            child: Chip(
-              avatar: Icon(Icons.phone_android, size: 18, color: scheme.primary),
-              label: Text(controller.device!.pendingOperations == 0
-                  ? s.t('deviceSynced')
-                  : '${controller.device!.pendingOperations} ${s.t('devicePending')}'),
-            ),
-          ),
-          if (controller.device!.problemCount > 0)
-            Tooltip(
-              message: s.t('deviceProblemsHint'),
-              child: Chip(
-                avatar: Icon(Icons.report_problem, size: 18, color: scheme.error),
-                label: Text('${controller.device!.problemCount}'),
-              ),
-            ),
-          IconButton(tooltip: s.t('syncNow'), icon: const Icon(Icons.sync), onPressed: controller.syncNow),
-        ],
+        if (controller.deviceMode) ..._deviceActions(s, scheme),
         Tooltip(
           message: online ? s.t('online') : s.t('unreachable'),
           child: Padding(
@@ -156,6 +133,42 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ],
     );
+  }
+
+  /// Company, tenant, operator and the open session's sale count.
+  String _context(S s) {
+    final terminal = controller.terminal;
+    final session = controller.session;
+    final user = controller.user;
+    return [
+      if (terminal != null) terminal.companyName,
+      if (controller.tenant != null) controller.tenant!.name,
+      if (user != null) user.name.isNotEmpty ? user.name : user.email,
+      if (session != null && session.isOpen) '${s.t('sales')}: ${session.saleCount}',
+    ].join(' · ');
+  }
+
+  /// Installed-app (device) state: pending operations, problems and a manual sync.
+  List<Widget> _deviceActions(S s, ColorScheme scheme) {
+    final device = controller.device!;
+    return [
+      Tooltip(
+        message: s.t('deviceModeHint'),
+        child: Chip(
+          avatar: Icon(Icons.phone_android, size: 18, color: scheme.primary),
+          label: Text(device.pendingOperations == 0 ? s.t('deviceSynced') : '${device.pendingOperations} ${s.t('devicePending')}'),
+        ),
+      ),
+      if (device.problemCount > 0)
+        Tooltip(
+          message: s.t('deviceProblemsHint'),
+          child: Chip(
+            avatar: Icon(Icons.report_problem, size: 18, color: scheme.error),
+            label: Text('${device.problemCount}'),
+          ),
+        ),
+      IconButton(tooltip: s.t('syncNow'), icon: const Icon(Icons.sync), onPressed: controller.syncNow),
+    ];
   }
 }
 
@@ -459,38 +472,44 @@ class _OpenSessionViewState extends State<OpenSessionView> {
         const SizedBox(height: 20),
         FilledButton.icon(
           icon: const Icon(Icons.lock_open),
-          onPressed: widget.controller.busy
-              ? null
-              : () {
-                  final amount = _amount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_amount.text);
-                  setState(() => _amountError = amount == null || amount.isNegative ? s.t('invalidAmount') : null);
-                  if (_amountError == null) widget.controller.openSession(amount!);
-                },
+          onPressed: widget.controller.busy ? null : () => _open(s),
           label: Text(s.t('openSession')),
         ),
         TextButton(onPressed: widget.controller.backToTerminals, child: Text(s.t('switchTerminal'))),
-        if (widget.controller.canProvisionDevice) ...[
-          const Divider(height: 32),
-          Text(s.t('provisionTitle'), style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(s.t('provisionHint'), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 8),
-          TextField(controller: _deviceName, decoration: InputDecoration(labelText: s.t('deviceName'))),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.offline_bolt),
-            onPressed: widget.controller.busy || _deviceName.text.trim().isEmpty
-                ? null
-                : () => widget.controller.provisionDevice(_deviceName.text.trim()),
-            label: Text(s.t('provision')),
-          ),
-        ],
+        if (widget.controller.canProvisionDevice) ..._provisionSection(s),
         if (widget.controller.deviceMode) ...[
           const SizedBox(height: 8),
           Text(s.t('deviceModeHint'), style: Theme.of(context).textTheme.bodySmall),
         ],
       ]),
     );
+  }
+
+  void _open(S s) {
+    final amount = _amount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_amount.text);
+    setState(() => _amountError = amount == null || amount.isNegative ? s.t('invalidAmount') : null);
+    if (_amountError == null) widget.controller.openSession(amount!);
+  }
+
+  /// Turns this installed app into an offline-capable device of the register.
+  List<Widget> _provisionSection(S s) {
+    final text = Theme.of(context).textTheme;
+    return [
+      const Divider(height: 32),
+      Text(s.t('provisionTitle'), style: text.titleMedium),
+      const SizedBox(height: 4),
+      Text(s.t('provisionHint'), style: text.bodySmall),
+      const SizedBox(height: 8),
+      TextField(controller: _deviceName, decoration: InputDecoration(labelText: s.t('deviceName'))),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        icon: const Icon(Icons.offline_bolt),
+        onPressed: widget.controller.busy || _deviceName.text.trim().isEmpty
+            ? null
+            : () => widget.controller.provisionDevice(_deviceName.text.trim()),
+        label: Text(s.t('provision')),
+      ),
+    ];
   }
 }
 
@@ -731,37 +750,52 @@ class _CartPane extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(s.t('cart'), style: text.titleLarge),
         const SizedBox(height: 8),
-        Expanded(
-          child: controller.cart.isEmpty
-              ? Center(child: Text(s.t('emptyCart')))
-              : ListView.separated(
-                  itemCount: controller.cart.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final line = controller.cart[index];
-                    return ListTile(
-                      title: Text(line.item.name),
-                      subtitle: Text('${line.quantity.format(places: 3)} × ${fmt(line.item.price)}'
-                          '${line.discount.isZero ? '' : ' − ${fmt(line.discount)}'}'),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(fmt(line.total), style: text.titleMedium),
-                        IconButton(
-                          tooltip: s.t('quantity'),
-                          icon: const Icon(Icons.edit),
-                          onPressed: controller.saleInDoubt
-                              ? null
-                              : () => showDialog(context: context, builder: (_) => _LineDialog(controller: controller, line: line)),
-                        ),
-                      ]),
-                    );
-                  },
-                ),
-        ),
+        Expanded(child: controller.cart.isEmpty ? Center(child: Text(s.t('emptyCart'))) : _lines(s, text)),
         const Divider(),
         _TotalRow(label: s.t('subtotal'), value: controller.subtotal),
         if (!controller.discount.isZero) _TotalRow(label: s.t('discount'), value: -controller.discount),
         _TotalRow(label: s.t('total'), value: controller.total, strong: true),
         const SizedBox(height: 8),
+        ..._payments(s),
+        if (controller.saleInDoubt) ...[
+          const SizedBox(height: 8),
+          Text(s.t('inDoubt'), style: text.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
+        ],
+        const SizedBox(height: 12),
+        _actions(context, s),
+        if (controller.saleInDoubt)
+          TextButton(onPressed: controller.discardSaleInDoubt, child: Text(s.t('checkSale')))
+        else if (controller.cart.isNotEmpty)
+          TextButton(onPressed: controller.clearSale, child: Text(s.t('clear'))),
+      ]),
+    );
+  }
+
+  Widget _lines(S s, TextTheme text) => ListView.separated(
+        itemCount: controller.cart.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final line = controller.cart[index];
+          return ListTile(
+            title: Text(line.item.name),
+            subtitle: Text('${line.quantity.format(places: 3)} × ${fmt(line.item.price)}'
+                '${line.discount.isZero ? '' : ' − ${fmt(line.discount)}'}'),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(fmt(line.total), style: text.titleMedium),
+              IconButton(
+                tooltip: s.t('quantity'),
+                icon: const Icon(Icons.edit),
+                onPressed: controller.saleInDoubt
+                    ? null
+                    : () => showDialog(context: context, builder: (_) => _LineDialog(controller: controller, line: line)),
+              ),
+            ]),
+          );
+        },
+      );
+
+  /// Registered payments, paid amount, what is still due and the change.
+  List<Widget> _payments(S s) => [
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final p in controller.payments)
             InputChip(
@@ -774,45 +808,35 @@ class _CartPane extends StatelessWidget {
           if (controller.remaining.isPositive) _TotalRow(label: s.t('remaining'), value: controller.remaining),
           if (controller.change.isPositive) _TotalRow(label: s.t('change'), value: controller.change, strong: true),
         ],
-        if (controller.saleInDoubt) ...[
-          const SizedBox(height: 8),
-          Text(s.t('inDoubt'), style: text.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
-        ],
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.payments),
-              onPressed: controller.cart.isEmpty || controller.saleInDoubt || !controller.remaining.isPositive
-                  ? null
-                  : () => showDialog(context: context, builder: (_) => PaymentDialog(controller: controller)),
-              label: Text(s.t('pay')),
-            ),
+      ];
+
+  Widget _actions(BuildContext context, S s) => Row(children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.payments),
+            onPressed: controller.cart.isEmpty || controller.saleInDoubt || !controller.remaining.isPositive
+                ? null
+                : () => showDialog(context: context, builder: (_) => PaymentDialog(controller: controller)),
+            label: Text(s.t('pay')),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FilledButton.icon(
-              icon: controller.busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.check),
-              onPressed: controller.busy || !controller.canFinish
-                  ? null
-                  : () async {
-                      final sale = await controller.finish();
-                      if (sale != null && context.mounted) {
-                        await showDialog(context: context, builder: (_) => SaleDoneDialog(controller: controller, sale: sale));
-                      }
-                    },
-              label: Text(controller.saleInDoubt ? s.t('retry') : s.t('finish')),
-            ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FilledButton.icon(
+            icon: controller.busy
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.check),
+            onPressed: controller.busy || !controller.canFinish ? null : () => _finish(context),
+            label: Text(controller.saleInDoubt ? s.t('retry') : s.t('finish')),
           ),
-        ]),
-        if (controller.saleInDoubt)
-          TextButton(onPressed: controller.discardSaleInDoubt, child: Text(s.t('checkSale')))
-        else if (controller.cart.isNotEmpty)
-          TextButton(onPressed: controller.clearSale, child: Text(s.t('clear'))),
-      ]),
-    );
+        ),
+      ]);
+
+  Future<void> _finish(BuildContext context) async {
+    final sale = await controller.finish();
+    if (sale != null && context.mounted) {
+      await showDialog(context: context, builder: (_) => SaleDoneDialog(controller: controller, sale: sale));
+    }
   }
 }
 
@@ -866,34 +890,36 @@ class _LineDialogState extends State<_LineDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel'))),
         FilledButton(
-          onPressed: () {
-            final qty = parseAmount(_qty.text, 6);
-            final discount = _discount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_discount.text);
-            setState(() {
-              _qtyError = qty == null || qty.isNegative ? s.t('invalidAmount') : null;
-              _error = discount == null ? s.t('invalidAmount') : null;
-            });
-            if (qty == null || qty.isNegative || discount == null) return;
-            if (qty.isPositive) {
-              // Check the discount against the new quantity before changing the line.
-              final previous = widget.line.quantity;
-              widget.controller.setQuantity(widget.line, qty);
-              final problem = widget.controller.setDiscount(widget.line, discount);
-              if (problem != null) {
-                widget.controller.setQuantity(widget.line, previous);
-                setState(() => _error = '${s.message(problem)} ${s.t('discountMax')}: '
-                    '${fmt(widget.controller.discountLimit(CartLine(item: widget.line.item, quantity: qty)))}');
-                return;
-              }
-            } else {
-              widget.controller.setQuantity(widget.line, qty);
-            }
-            Navigator.pop(context);
-          },
+          onPressed: () => _confirm(s),
           child: Text(s.t('confirm')),
         ),
       ],
     );
+  }
+
+  void _confirm(S s) {
+    final qty = parseAmount(_qty.text, 6);
+    final discount = _discount.text.trim().isEmpty ? Decimal.zero() : parseAmount(_discount.text);
+    setState(() {
+      _qtyError = qty == null || qty.isNegative ? s.t('invalidAmount') : null;
+      _error = discount == null ? s.t('invalidAmount') : null;
+    });
+    if (qty == null || qty.isNegative || discount == null) return;
+    if (qty.isPositive && !_applyWithDiscount(s, qty, discount)) return;
+    if (!qty.isPositive) widget.controller.setQuantity(widget.line, qty);
+    Navigator.pop(context);
+  }
+
+  /// Checks the discount against the new quantity before changing the line; false keeps the dialog.
+  bool _applyWithDiscount(S s, Decimal qty, Decimal discount) {
+    final previous = widget.line.quantity;
+    widget.controller.setQuantity(widget.line, qty);
+    final problem = widget.controller.setDiscount(widget.line, discount);
+    if (problem == null) return true;
+    widget.controller.setQuantity(widget.line, previous);
+    setState(() => _error = '${s.message(problem)} ${s.t('discountMax')}: '
+        '${fmt(widget.controller.discountLimit(CartLine(item: widget.line.item, quantity: qty)))}');
+    return false;
   }
 }
 
@@ -955,41 +981,51 @@ class _PaymentDialogState extends State<PaymentDialog> {
           ],
           const SizedBox(height: 12),
           MoneyField(controller: _amount, label: s.t('amount'), autofocus: true, errorText: _amountError),
-          if (card) ...[
-            const SizedBox(height: 12),
-            TextField(controller: _nsu, decoration: InputDecoration(labelText: s.t('nsu'))),
-            const SizedBox(height: 8),
-            TextField(controller: _auth, decoration: InputDecoration(labelText: s.t('authCode'))),
-            const SizedBox(height: 8),
-            Text(s.t('cardHint'), style: Theme.of(context).textTheme.bodySmall),
-          ],
-          if (_method == PaymentMethod.pix) ...[
-            const SizedBox(height: 8),
-            Text(s.t('pixHint'), style: Theme.of(context).textTheme.bodySmall),
-          ],
+          ..._methodDetails(s, card),
         ]),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(s.t('cancel'))),
         FilledButton(
-          onPressed: () {
-            final amount = parseAmount(_amount.text);
-            setState(() => _amountError = amount == null || !amount.isPositive ? s.t('invalidAmount') : null);
-            if (amount == null || !amount.isPositive) return;
-            // Only cash may exceed the remaining amount (change).
-            final value = _method == PaymentMethod.cash ? amount : amount.min(widget.controller.remaining);
-            widget.controller.addPayment(PaymentEntry(
-              method: _method,
-              amount: value,
-              providerReference: card && _nsu.text.trim().isNotEmpty ? _nsu.text.trim() : null,
-              authorizationCode: card && _auth.text.trim().isNotEmpty ? _auth.text.trim() : null,
-            ));
-            Navigator.pop(context);
-          },
+          onPressed: () => _add(s, card),
           child: Text(s.t('add')),
         ),
       ],
     );
+  }
+
+  /// Card terminal references (NSU, authorization) or the Pix hint for the chosen method.
+  List<Widget> _methodDetails(S s, bool card) {
+    final small = Theme.of(context).textTheme.bodySmall;
+    return [
+      if (card) ...[
+        const SizedBox(height: 12),
+        TextField(controller: _nsu, decoration: InputDecoration(labelText: s.t('nsu'))),
+        const SizedBox(height: 8),
+        TextField(controller: _auth, decoration: InputDecoration(labelText: s.t('authCode'))),
+        const SizedBox(height: 8),
+        Text(s.t('cardHint'), style: small),
+      ],
+      if (_method == PaymentMethod.pix) ...[
+        const SizedBox(height: 8),
+        Text(s.t('pixHint'), style: small),
+      ],
+    ];
+  }
+
+  void _add(S s, bool card) {
+    final amount = parseAmount(_amount.text);
+    setState(() => _amountError = amount == null || !amount.isPositive ? s.t('invalidAmount') : null);
+    if (amount == null || !amount.isPositive) return;
+    // Only cash may exceed the remaining amount (change).
+    final value = _method == PaymentMethod.cash ? amount : amount.min(widget.controller.remaining);
+    widget.controller.addPayment(PaymentEntry(
+      method: _method,
+      amount: value,
+      providerReference: card && _nsu.text.trim().isNotEmpty ? _nsu.text.trim() : null,
+      authorizationCode: card && _auth.text.trim().isNotEmpty ? _auth.text.trim() : null,
+    ));
+    Navigator.pop(context);
   }
 }
 
@@ -1062,48 +1098,14 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
             label: Text(confirmed ? s.t('paymentConfirmed') : s.t('paymentPending')),
           ),
           for (final p in _pending)
-            if (p['PspMethod'] == 'pix') ...[
-              const SizedBox(height: 8),
-              if (_pixCodes[p['PspUUID'].toString()] case final code?) ...[
-                Center(child: QrImageView(data: code, size: 220, backgroundColor: Colors.white)),
-                TextButton.icon(
-                  icon: const Icon(Icons.copy),
-                  onPressed: () => Clipboard.setData(ClipboardData(text: code)),
-                  label: Text(s.t('copyPix')),
-                ),
-                OutlinedButton(onPressed: _check, child: Text(s.t('checkPix'))),
-              ] else
-                FilledButton.icon(
-                  icon: const Icon(Icons.qr_code_2),
-                  onPressed: () => _generatePix(p['PspUUID'].toString()),
-                  label: Text('${s.t('generatePix')} · ${fmt(money(p['PspAmount']))}'),
-                ),
-              Text(s.t('pixHint'), style: Theme.of(context).textTheme.bodySmall),
-            ],
+            if (p['PspMethod'] == 'pix') ..._pixPayment(s, p),
           if (_pixError != null) ...[
             const SizedBox(height: 8),
             Text(s.message(_pixError!), style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
           if (onDevice)
             Chip(avatar: const Icon(Icons.sync, size: 18), label: Text(s.t('waitingSync'))),
-          if (onDevice)
-            ListenableBuilder(
-              listenable: widget.controller,
-              builder: (context, _) {
-                final doc = widget.controller.lastFiscalDocument;
-                final message = widget.controller.fiscalMessage;
-                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  if (doc != null) ...[
-                    const SizedBox(height: 8),
-                    Text('${s.t('nfceContingency')} · ${s.t('saleNumber')} ${doc['number']} · ${s.t('series')} ${doc['series']}',
-                        style: Theme.of(context).textTheme.titleSmall),
-                    Center(child: QrImageView(data: '${doc['qrCode']}', size: 200, backgroundColor: Colors.white)),
-                    SelectableText('${doc['accessKey']}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                  if (message != null) Text(message, style: Theme.of(context).textTheme.bodySmall),
-                ]);
-              },
-            ),
+          if (onDevice) _contingencyDocument(s),
           const SizedBox(height: 12),
           Text(s.t('noFiscal'), style: Theme.of(context).textTheme.bodySmall),
         ]),
@@ -1111,6 +1113,49 @@ class _SaleDoneDialogState extends State<SaleDoneDialog> {
       actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(s.t('close')))],
     );
   }
+
+  /// Pending Pix payment: its QR code once generated, otherwise the button that charges it.
+  List<Widget> _pixPayment(S s, Map<String, dynamic> p) {
+    final code = _pixCodes[p['PspUUID'].toString()];
+    return [
+      const SizedBox(height: 8),
+      if (code != null) ...[
+        Center(child: QrImageView(data: code, size: 220, backgroundColor: Colors.white)),
+        TextButton.icon(
+          icon: const Icon(Icons.copy),
+          onPressed: () => Clipboard.setData(ClipboardData(text: code)),
+          label: Text(s.t('copyPix')),
+        ),
+        OutlinedButton(onPressed: _check, child: Text(s.t('checkPix'))),
+      ] else
+        FilledButton.icon(
+          icon: const Icon(Icons.qr_code_2),
+          onPressed: () => _generatePix(p['PspUUID'].toString()),
+          label: Text('${s.t('generatePix')} · ${fmt(money(p['PspAmount']))}'),
+        ),
+      Text(s.t('pixHint'), style: Theme.of(context).textTheme.bodySmall),
+    ];
+  }
+
+  /// Offline (contingency) NFC-e of a sale kept on the device, as it becomes available.
+  Widget _contingencyDocument(S s) => ListenableBuilder(
+        listenable: widget.controller,
+        builder: (context, _) {
+          final doc = widget.controller.lastFiscalDocument;
+          final message = widget.controller.fiscalMessage;
+          final text = Theme.of(context).textTheme;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (doc != null) ...[
+              const SizedBox(height: 8),
+              Text('${s.t('nfceContingency')} · ${s.t('saleNumber')} ${doc['number']} · ${s.t('series')} ${doc['series']}',
+                  style: text.titleSmall),
+              Center(child: QrImageView(data: '${doc['qrCode']}', size: 200, backgroundColor: Colors.white)),
+              SelectableText('${doc['accessKey']}', textAlign: TextAlign.center, style: text.bodySmall),
+            ],
+            if (message != null) Text(message, style: text.bodySmall),
+          ]);
+        },
+      );
 }
 
 /// Register operations: cash in/out, drawer summary, sales of the session (cancel) and closing.
@@ -1155,91 +1200,22 @@ class _RegisterDialogState extends State<RegisterDialog> {
       listenable: widget.controller,
       builder: (context, _) {
         final session = widget.controller.session;
-        final error = widget.controller.error;
-        final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
         return AlertDialog(
           title: Text(s.t('register')),
           content: SizedBox(
             width: 460,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                if (session != null) ...[
-                  _TotalRow(label: s.t('openingAmount'), value: session.openingAmount),
-                  _TotalRow(label: s.t('sales'), value: session.saleTotal),
-                  for (final entry in session.totalsByMethod.entries)
-                    if (entry.key != 'cash') _TotalRow(label: s.t(entry.key), value: entry.value),
-                  if (session.cashSalesNet != null)
-                    _TotalRow(label: s.t('cashSalesNet'), value: session.cashSalesNet!)
-                  else if (session.totalsByMethod['cash'] case final cash?)
-                    _TotalRow(label: s.t('cash'), value: cash),
-                  if (session.supplyTotal != null && !session.supplyTotal!.isZero)
-                    _TotalRow(label: s.t('supplies'), value: session.supplyTotal!),
-                  if (session.withdrawalTotal != null && !session.withdrawalTotal!.isZero)
-                    _TotalRow(label: s.t('withdrawals'), value: -session.withdrawalTotal!),
-                  _TotalRow(label: s.t('expectedCash'), value: session.expectedCash, strong: true),
-                  if (session.pendingPayments > 0) Text('${s.t('pendingPayments')}: ${session.pendingPayments}'),
-                  const Divider(),
-                ],
-                // Errors show here: the banner of the main screen is hidden behind this dialog.
-                if (error != null) ...[
-                  Text(s.message(error), style: errorStyle),
-                  const SizedBox(height: 8),
-                ],
-                if (_saved != null) ...[
-                  Text(_saved!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                  const SizedBox(height: 8),
-                ],
+                if (session != null) ..._summary(s, session),
+                ..._messages(s),
                 MoneyField(controller: _amount, label: s.t('amount'), errorText: _amountError),
                 TextField(controller: _notes, decoration: InputDecoration(labelText: s.t('notes'))),
                 const SizedBox(height: 12),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  OutlinedButton(
-                    onPressed: widget.controller.busy ? null : () => _movement('supply'),
-                    child: Text(s.t('supply')),
-                  ),
-                  OutlinedButton(
-                    onPressed: widget.controller.busy ? null : () => _movement('withdrawal'),
-                    child: Text(s.t('withdrawal')),
-                  ),
-                  FilledButton.tonal(
-                    onPressed: widget.controller.busy ? null : _close,
-                    child: Text('${s.t('closeSession')} (${s.t('countedCash')})'),
-                  ),
-                ]),
-                if (!widget.controller.deviceMode) ...[
-                  const Divider(height: 32),
-                  Text(s.t('sessionSales'), style: Theme.of(context).textTheme.titleMedium),
-                  if (_sales.isEmpty)
-                    Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.t('noSessionSales')))
-                  else ...[
-                    TextField(
-                      controller: _reason,
-                      decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError, errorMaxLines: 3),
-                    ),
-                    for (final sale in _sales)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('${s.t('saleNumber')} ${sale.number} · ${fmt(sale.total)}'),
-                        subtitle: Text(sale.commercialState == 'canceled'
-                            ? s.t('canceled')
-                            : (sale.paymentState == 'confirmed' ? s.t('paymentConfirmed') : s.t('paymentPending'))),
-                        trailing: sale.commercialState == 'confirmed'
-                            ? TextButton(
-                                onPressed: widget.controller.busy ? null : () => _cancel(sale),
-                                child: Text(s.t('cancelThisSale')),
-                              )
-                            : null,
-                      ),
-                  ],
-                ] else if (widget.controller.lastSale != null &&
-                    widget.controller.lastSale!.commercialState == 'confirmed') ...[
-                  const Divider(),
-                  TextField(controller: _reason, decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError)),
-                  TextButton(
-                    onPressed: () => _cancel(widget.controller.lastSale!),
-                    child: Text('${s.t('cancelSale')} · ${widget.controller.lastSale!.number}'),
-                  ),
-                ],
+                _movements(s),
+                if (!widget.controller.deviceMode)
+                  ..._sessionSales(s)
+                else if (widget.controller.lastSale != null && widget.controller.lastSale!.commercialState == 'confirmed')
+                  ..._cancelLastSale(s),
               ]),
             ),
           ),
@@ -1247,6 +1223,101 @@ class _RegisterDialogState extends State<RegisterDialog> {
         );
       },
     );
+  }
+
+  /// Drawer summary of the open session.
+  List<Widget> _summary(S s, CashSession session) => [
+        _TotalRow(label: s.t('openingAmount'), value: session.openingAmount),
+        _TotalRow(label: s.t('sales'), value: session.saleTotal),
+        for (final entry in session.totalsByMethod.entries)
+          if (entry.key != 'cash') _TotalRow(label: s.t(entry.key), value: entry.value),
+        if (session.cashSalesNet != null)
+          _TotalRow(label: s.t('cashSalesNet'), value: session.cashSalesNet!)
+        else if (session.totalsByMethod['cash'] case final cash?)
+          _TotalRow(label: s.t('cash'), value: cash),
+        if (session.supplyTotal != null && !session.supplyTotal!.isZero)
+          _TotalRow(label: s.t('supplies'), value: session.supplyTotal!),
+        if (session.withdrawalTotal != null && !session.withdrawalTotal!.isZero)
+          _TotalRow(label: s.t('withdrawals'), value: -session.withdrawalTotal!),
+        _TotalRow(label: s.t('expectedCash'), value: session.expectedCash, strong: true),
+        if (session.pendingPayments > 0) Text('${s.t('pendingPayments')}: ${session.pendingPayments}'),
+        const Divider(),
+      ];
+
+  /// Errors show here: the banner of the main screen is hidden behind this dialog.
+  List<Widget> _messages(S s) {
+    final error = widget.controller.error;
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      if (error != null) ...[
+        Text(s.message(error), style: TextStyle(color: scheme.error)),
+        const SizedBox(height: 8),
+      ],
+      if (_saved != null) ...[
+        Text(_saved!, style: TextStyle(color: scheme.primary)),
+        const SizedBox(height: 8),
+      ],
+    ];
+  }
+
+  Widget _movements(S s) {
+    final busy = widget.controller.busy;
+    return Wrap(spacing: 8, runSpacing: 8, children: [
+      OutlinedButton(onPressed: busy ? null : () => _movement('supply'), child: Text(s.t('supply'))),
+      OutlinedButton(onPressed: busy ? null : () => _movement('withdrawal'), child: Text(s.t('withdrawal'))),
+      FilledButton.tonal(
+        onPressed: busy ? null : _close,
+        child: Text('${s.t('closeSession')} (${s.t('countedCash')})'),
+      ),
+    ]);
+  }
+
+  /// Sales of the session, each cancellable while confirmed (online register).
+  List<Widget> _sessionSales(S s) => [
+        const Divider(height: 32),
+        Text(s.t('sessionSales'), style: Theme.of(context).textTheme.titleMedium),
+        if (_sales.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.t('noSessionSales')))
+        else ...[
+          TextField(
+            controller: _reason,
+            decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError, errorMaxLines: 3),
+          ),
+          for (final sale in _sales) _saleTile(s, sale),
+        ],
+      ];
+
+  Widget _saleTile(S s, PosSaleResult sale) {
+    final String state;
+    if (sale.commercialState == 'canceled') {
+      state = s.t('canceled');
+    } else {
+      state = sale.paymentState == 'confirmed' ? s.t('paymentConfirmed') : s.t('paymentPending');
+    }
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text('${s.t('saleNumber')} ${sale.number} · ${fmt(sale.total)}'),
+      subtitle: Text(state),
+      trailing: sale.commercialState == 'confirmed'
+          ? TextButton(
+              onPressed: widget.controller.busy ? null : () => _cancel(sale),
+              child: Text(s.t('cancelThisSale')),
+            )
+          : null,
+    );
+  }
+
+  /// Installed device: only the last confirmed sale can be cancelled from here.
+  List<Widget> _cancelLastSale(S s) {
+    final last = widget.controller.lastSale!;
+    return [
+      const Divider(),
+      TextField(controller: _reason, decoration: InputDecoration(labelText: s.t('reason'), errorText: _reasonError)),
+      TextButton(
+        onPressed: () => _cancel(last),
+        child: Text('${s.t('cancelSale')} · ${last.number}'),
+      ),
+    ];
   }
 
   Decimal? _validAmount() {

@@ -317,49 +317,84 @@ BuiltNfce buildInfNFe(NfceInput input) {
   final cUF = stateCodes[state];
   if (cUF == null) throw ArgumentError('Unknown issuer state: $state');
   if (input.items.isEmpty) throw ArgumentError('A fiscal document needs items');
-  final contingency = input.contingencyAt != null;
-  var products = 0, discount = 0, icms = 0, pis = 0, cofins = 0, icmsBase = 0, fcp = 0;
+  final totals = _NfceTotals();
   final details = StringBuffer();
   for (var index = 0; index < input.items.length; index++) {
-    final item = input.items[index];
-    final gross = (double.parse(quantity4(item.quantity)) * cents(item.unitPrice)).round();
-    final itemDiscount = cents(item.discount);
-    products += gross;
-    discount += itemDiscount;
-    icms += item.taxes.icmsValue;
-    icmsBase += item.taxes.icmsBase;
-    fcp += item.taxes.fcpValue;
-    pis += item.taxes.pisValue;
-    cofins += item.taxes.cofinsValue;
-    final description = !input.production && index == 0 ? homologationItemText : fiscalText(item.description, 120);
-    final gtin = RegExp(r'^\d{8}$|^\d{12,14}$').hasMatch(item.barcode ?? '') ? item.barcode! : 'SEM GTIN';
-    final unit = fiscalText(item.unit == null || item.unit!.isEmpty ? 'UN' : item.unit, 6);
-    final prod = [
-      tag('cProd', fiscalText(item.code ?? '${index + 1}', 60)),
-      tag('cEAN', gtin),
-      tag('xProd', description),
-      tag('NCM', _digits(item.ncm).isEmpty ? '00000000' : _digits(item.ncm)),
-      tag('CEST', _digits(item.cest).isEmpty ? null : _digits(item.cest)),
-      tag('CFOP', item.taxes.cfop),
-      tag('uCom', unit),
-      tag('qCom', quantity4(item.quantity)),
-      tag('vUnCom', money(cents(item.unitPrice))),
-      tag('vProd', money(gross)),
-      tag('cEANTrib', gtin),
-      tag('uTrib', unit),
-      tag('qTrib', quantity4(item.quantity)),
-      tag('vUnTrib', money(cents(item.unitPrice))),
-      itemDiscount > 0 ? tag('vDesc', money(itemDiscount)) : '',
-      tag('indTot', '1'),
-    ].join();
-    final origin = item.origin == null || item.origin!.isEmpty || item.origin == 'NULL' ? '0' : item.origin!;
-    final t = item.taxes;
-    details.write('<det nItem="${index + 1}"><prod>$prod</prod><imposto><ICMS>${_icmsGroup(origin, t)}</ICMS>'
-        '<PIS>${_contribution('PIS', t.pisCst, t.pisBase, t.pisRate, t.pisValue)}</PIS>'
-        '<COFINS>${_contribution('COFINS', t.cofinsCst, t.cofinsBase, t.cofinsRate, t.cofinsValue)}</COFINS></imposto></det>');
+    details.write(_itemDetail(input, index, totals));
   }
-  final total = products - discount;
-  final ide = [
+  final total = totals.products - totals.discount;
+  // Same order as the document: identification, issuer and totals before the payment check.
+  final ide = _ideGroup(input, cUF, state);
+  final emit = _emitGroup(input.issuer, state);
+  final icmsTotal = _icmsTotalGroup(totals, total);
+  final pag = _paymentGroup(input, total);
+  final info = fiscalText({for (final i in input.items) if (i.taxes.legalText != null) i.taxes.legalText!}.join(' '), 5000);
+  final inner = '<ide>$ide</ide><emit>$emit</emit>$details<total><ICMSTot>$icmsTotal</ICMSTot></total>'
+      '<transp>${tag('modFrete', '9')}</transp>$pag${info.isEmpty ? '' : '<infAdic>${tag('infCpl', info)}</infAdic>'}';
+  final id = 'NFe${input.accessKey}';
+  return BuiltNfce(
+    id,
+    '<infNFe Id="${xmlAttr(id)}" versao="4.00">$inner</infNFe>',
+    '<infNFe xmlns="$nfeNamespace" Id="${xmlAttr(id)}" versao="4.00">$inner</infNFe>',
+    total,
+  );
+}
+
+/// Running document totals, in cents.
+class _NfceTotals {
+  int products = 0, discount = 0, icms = 0, pis = 0, cofins = 0, icmsBase = 0, fcp = 0;
+}
+
+/// `<det>` of the item at [index]; adds its amounts to [totals].
+String _itemDetail(NfceInput input, int index, _NfceTotals totals) {
+  final item = input.items[index];
+  final t = item.taxes;
+  final gross = (double.parse(quantity4(item.quantity)) * cents(item.unitPrice)).round();
+  final itemDiscount = cents(item.discount);
+  totals
+    ..products += gross
+    ..discount += itemDiscount
+    ..icms += t.icmsValue
+    ..icmsBase += t.icmsBase
+    ..fcp += t.fcpValue
+    ..pis += t.pisValue
+    ..cofins += t.cofinsValue;
+  final origin = item.origin == null || item.origin!.isEmpty || item.origin == 'NULL' ? '0' : item.origin!;
+  return '<det nItem="${index + 1}"><prod>${_productGroup(input, index, gross, itemDiscount)}</prod><imposto><ICMS>${_icmsGroup(origin, t)}</ICMS>'
+      '<PIS>${_contribution('PIS', t.pisCst, t.pisBase, t.pisRate, t.pisValue)}</PIS>'
+      '<COFINS>${_contribution('COFINS', t.cofinsCst, t.cofinsBase, t.cofinsRate, t.cofinsValue)}</COFINS></imposto></det>';
+}
+
+String _productGroup(NfceInput input, int index, int gross, int itemDiscount) {
+  final item = input.items[index];
+  final description = !input.production && index == 0 ? homologationItemText : fiscalText(item.description, 120);
+  final gtin = RegExp(r'^\d{8}$|^\d{12,14}$').hasMatch(item.barcode ?? '') ? item.barcode! : 'SEM GTIN';
+  final unit = fiscalText(item.unit == null || item.unit!.isEmpty ? 'UN' : item.unit, 6);
+  final ncm = _digits(item.ncm);
+  final cest = _digits(item.cest);
+  return [
+    tag('cProd', fiscalText(item.code ?? '${index + 1}', 60)),
+    tag('cEAN', gtin),
+    tag('xProd', description),
+    tag('NCM', ncm.isEmpty ? '00000000' : ncm),
+    tag('CEST', cest.isEmpty ? null : cest),
+    tag('CFOP', item.taxes.cfop),
+    tag('uCom', unit),
+    tag('qCom', quantity4(item.quantity)),
+    tag('vUnCom', money(cents(item.unitPrice))),
+    tag('vProd', money(gross)),
+    tag('cEANTrib', gtin),
+    tag('uTrib', unit),
+    tag('qTrib', quantity4(item.quantity)),
+    tag('vUnTrib', money(cents(item.unitPrice))),
+    itemDiscount > 0 ? tag('vDesc', money(itemDiscount)) : '',
+    tag('indTot', '1'),
+  ].join();
+}
+
+String _ideGroup(NfceInput input, String cUF, String state) {
+  final contingency = input.contingencyAt != null;
+  return [
     tag('cUF', cUF),
     tag('cNF', input.accessKey.substring(35, 43)),
     tag('natOp', 'VENDA'),
@@ -382,34 +417,46 @@ BuiltNfce buildInfNFe(NfceInput input) {
     if (contingency) tag('dhCont', fiscalDateTime(input.contingencyAt!, state)),
     if (contingency) tag('xJust', fiscalText(input.contingencyReason ?? 'SEM CONEXAO COM A SEFAZ', 256)),
   ].join();
-  final issuer = input.issuer;
-  final emit = [
+}
+
+/// Optional tag: omitted when the normalized value is empty.
+String _optionalTag(String name, String value) => tag(name, value.isEmpty ? null : value);
+
+String _emitGroup(Map<String, dynamic> issuer, String state) {
+  final stateRegistration = _digits(issuer['stateRegistration']);
+  final address = [
+    tag('xLgr', fiscalText(issuer['street'], 60)),
+    tag('nro', fiscalText(issuer['number'] ?? 'S/N', 60)),
+    _optionalTag('xCpl', fiscalText(issuer['complement'], 60)),
+    tag('xBairro', fiscalText(issuer['district'], 60)),
+    tag('cMun', _digits(issuer['municipalityCode'])),
+    tag('xMun', fiscalText(issuer['city'], 60)),
+    tag('UF', state),
+    tag('CEP', _digits(issuer['zip'])),
+    tag('cPais', '1058'),
+    tag('xPais', 'BRASIL'),
+    _optionalTag('fone', _digits(issuer['phone'])),
+  ].join();
+  return [
     tag('CNPJ', normalizeTaxId(issuer['document'])),
     tag('xNome', fiscalText(issuer['legalName'] ?? issuer['name'], 60)),
-    tag('xFant', fiscalText(issuer['name'], 60).isEmpty ? null : fiscalText(issuer['name'], 60)),
-    '<enderEmit>${[
-      tag('xLgr', fiscalText(issuer['street'], 60)),
-      tag('nro', fiscalText(issuer['number'] ?? 'S/N', 60)),
-      tag('xCpl', fiscalText(issuer['complement'], 60).isEmpty ? null : fiscalText(issuer['complement'], 60)),
-      tag('xBairro', fiscalText(issuer['district'], 60)),
-      tag('cMun', _digits(issuer['municipalityCode'])),
-      tag('xMun', fiscalText(issuer['city'], 60)),
-      tag('UF', state),
-      tag('CEP', _digits(issuer['zip'])),
-      tag('cPais', '1058'),
-      tag('xPais', 'BRASIL'),
-      tag('fone', _digits(issuer['phone']).isEmpty ? null : _digits(issuer['phone'])),
-    ].join()}</enderEmit>',
-    tag('IE', _digits(issuer['stateRegistration']).isEmpty ? 'ISENTO' : _digits(issuer['stateRegistration'])),
+    _optionalTag('xFant', fiscalText(issuer['name'], 60)),
+    '<enderEmit>$address</enderEmit>',
+    tag('IE', stateRegistration.isEmpty ? 'ISENTO' : stateRegistration),
     tag('CRT', regimeCode(issuer['taxRegime'] as String?)),
   ].join();
-  final icmsTotal = [
-    tag('vBC', money(icmsBase)), tag('vICMS', money(icms)), tag('vICMSDeson', '0.00'), tag('vFCP', money(fcp)),
-    tag('vBCST', '0.00'), tag('vST', '0.00'), tag('vFCPST', '0.00'), tag('vFCPSTRet', '0.00'), tag('vProd', money(products)),
-    tag('vFrete', '0.00'), tag('vSeg', '0.00'), tag('vDesc', money(discount)), tag('vII', '0.00'), tag('vIPI', '0.00'),
-    tag('vIPIDevol', '0.00'), tag('vPIS', money(pis)), tag('vCOFINS', money(cofins)), tag('vOutro', '0.00'),
-    tag('vNF', money(total)),
-  ].join();
+}
+
+String _icmsTotalGroup(_NfceTotals t, int total) => [
+      tag('vBC', money(t.icmsBase)), tag('vICMS', money(t.icms)), tag('vICMSDeson', '0.00'), tag('vFCP', money(t.fcp)),
+      tag('vBCST', '0.00'), tag('vST', '0.00'), tag('vFCPST', '0.00'), tag('vFCPSTRet', '0.00'), tag('vProd', money(t.products)),
+      tag('vFrete', '0.00'), tag('vSeg', '0.00'), tag('vDesc', money(t.discount)), tag('vII', '0.00'), tag('vIPI', '0.00'),
+      tag('vIPIDevol', '0.00'), tag('vPIS', money(t.pis)), tag('vCOFINS', money(t.cofins)), tag('vOutro', '0.00'),
+      tag('vNF', money(total)),
+    ].join();
+
+/// `<pag>`: payments minus change must equal the document total.
+String _paymentGroup(NfceInput input, int total) {
   final paid = input.payments.fold<int>(0, (sum, p) => sum + cents(p.amount));
   final change = cents(input.change);
   if (paid - change != total) throw ArgumentError('Payments minus change must equal the document total');
@@ -419,18 +466,7 @@ BuiltNfce buildInfNFe(NfceInput input) {
     final description = code == '99' ? tag('xPag', 'OUTROS') : '';
     return '<detPag>${tag('tPag', code)}$description${tag('vPag', money(cents(p.amount)))}$card</detPag>';
   }).join();
-  final pag = '<pag>$pays${change > 0 ? tag('vTroco', money(change)) : ''}</pag>';
-  final legal = {for (final i in input.items) if (i.taxes.legalText != null) i.taxes.legalText!}.join(' ');
-  final info = fiscalText(legal, 5000);
-  final inner = '<ide>$ide</ide><emit>$emit</emit>$details<total><ICMSTot>$icmsTotal</ICMSTot></total>'
-      '<transp>${tag('modFrete', '9')}</transp>$pag${info.isEmpty ? '' : '<infAdic>${tag('infCpl', info)}</infAdic>'}';
-  final id = 'NFe${input.accessKey}';
-  return BuiltNfce(
-    id,
-    '<infNFe Id="${xmlAttr(id)}" versao="4.00">$inner</infNFe>',
-    '<infNFe xmlns="$nfeNamespace" Id="${xmlAttr(id)}" versao="4.00">$inner</infNFe>',
-    total,
-  );
+  return '<pag>$pays${change > 0 ? tag('vTroco', money(change)) : ''}</pag>';
 }
 
 String assembleNfe(String infNFe, String signature, String supplement) =>

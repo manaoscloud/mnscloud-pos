@@ -22,26 +22,30 @@ ResolvedPrice resolvePrice({
   for (final raw in rules) {
     if (raw is! Map) continue;
     final rule = raw.cast<String, dynamic>();
-    final from = _date(rule['validFrom']);
-    final until = _date(rule['validUntil']);
-    if (from != null && from.isAfter(at)) continue;
-    if (until != null && !until.isAfter(at)) continue;
-    final min = Decimal.parse(rule['minQuantity'] ?? 1, 6);
-    if (min > quantity) continue;
-    if (best == null) {
-      best = rule;
-      continue;
-    }
-    final priority = _int(rule['priority']);
-    final bestPriority = _int(best['priority']);
-    if (priority < bestPriority ||
-        (priority == bestPriority && min > Decimal.parse(best['minQuantity'] ?? 1, 6))) {
-      best = rule;
-    }
+    if (!_applies(rule, quantity, at)) continue;
+    if (best == null || _beats(rule, best)) best = rule;
   }
   if (best == null) return ResolvedPrice(basePrice, 'base');
   return ResolvedPrice(Decimal.parse(best['price']), 'price_list');
 }
+
+/// The rule is valid at [at] and its minimum quantity is reached.
+bool _applies(Map<String, dynamic> rule, Decimal quantity, DateTime at) {
+  final from = _date(rule['validFrom']);
+  final until = _date(rule['validUntil']);
+  if (from != null && from.isAfter(at)) return false;
+  if (until != null && !until.isAfter(at)) return false;
+  return !(_minQuantity(rule) > quantity);
+}
+
+/// Lower priority wins; on a tie, the higher quantity tier wins.
+bool _beats(Map<String, dynamic> rule, Map<String, dynamic> best) {
+  final priority = _int(rule['priority']);
+  final bestPriority = _int(best['priority']);
+  return priority < bestPriority || (priority == bestPriority && _minQuantity(rule) > _minQuantity(best));
+}
+
+Decimal _minQuantity(Map<String, dynamic> rule) => Decimal.parse(rule['minQuantity'] ?? 1, 6);
 
 int _int(Object? value) => value is int ? value : int.tryParse(value?.toString() ?? '') ?? 0;
 
