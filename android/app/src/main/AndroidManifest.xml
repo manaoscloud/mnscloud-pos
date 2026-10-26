@@ -2,6 +2,9 @@
     <!-- The POS talks to the MNSCloud API (sync and online sales). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="false"
         android:label="mnscloud_pos"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
