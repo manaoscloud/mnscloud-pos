@@ -320,21 +320,6 @@ class _SignInViewState extends State<SignInView> {
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
               : Text(s.t('signIn')),
         ),
-        if (isWebPlatform) ...[
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.wifi, size: 18, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(child: Text(s.t('webOnline'), style: Theme.of(context).textTheme.bodySmall)),
-            ]),
-          ),
-        ],
       ]),
     );
   }

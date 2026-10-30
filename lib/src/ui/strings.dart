@@ -232,11 +232,6 @@ class S {
     'quantity': {'pt': 'Quantidade', 'en': 'Quantity', 'es': 'Cantidad'},
     'cancelSale': {'pt': 'Cancelar última venda', 'en': 'Cancel last sale', 'es': 'Cancelar última venta'},
     'reason': {'pt': 'Motivo', 'en': 'Reason', 'es': 'Motivo'},
-    'webOnline': {
-      'pt': 'Versão Web: funciona apenas online; nenhuma venda fica guardada no navegador.',
-      'en': 'Web version: online only; no sale is stored in the browser.',
-      'es': 'Versión Web: solo en línea; ninguna venta se guarda en el navegador.',
-    },
     'switchTerminal': {'pt': 'Trocar caixa', 'en': 'Change register', 'es': 'Cambiar caja'},
     'signOut': {'pt': 'Sair', 'en': 'Sign out', 'es': 'Salir'},
     'stock': {'pt': 'Estoque', 'en': 'Stock', 'es': 'Stock'},
