@@ -3,6 +3,7 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
+import '../platform/pwa.dart';
 import 'runtime_version.dart';
 
 /// Reads `build.json`, written by mnscloud-webapps next to `index.html` of the
@@ -55,4 +56,5 @@ void listenPageVisible(void Function() onVisible) {
 
 bool isPageVisible() => web.document.visibilityState == 'visible';
 
-void reloadPage() => web.window.location.reload();
+/// Activates the waiting PWA revision (service worker) and reloads; plain reload without it.
+void reloadPage() => pwaApplyUpdate();

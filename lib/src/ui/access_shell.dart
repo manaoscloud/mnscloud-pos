@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../brand/brand.dart';
 import '../state/pos_controller.dart';
+import 'install_app_button.dart';
 import 'strings.dart';
 
 const _defaultBrandColor = Color(0xFF1264ED);
@@ -168,6 +169,7 @@ class AccessShell extends StatelessWidget {
                             child: AccessBrand(brand: brand),
                           ),
                         AccessLanguageButton(controller: controller),
+                        const InstallAppButton(labeled: true),
                         if (onSignOut != null)
                           IconButton(
                             key: const Key('signOut'),

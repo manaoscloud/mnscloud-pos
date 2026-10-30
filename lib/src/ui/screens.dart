@@ -11,6 +11,7 @@ import '../platform/scanner_support.dart';
 import '../platform/session.dart';
 import '../state/pos_controller.dart';
 import 'access_shell.dart';
+import 'install_app_button.dart';
 import 'strings.dart';
 
 String fmt(Decimal value) => value.format();
@@ -125,6 +126,7 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
             icon: const Icon(Icons.point_of_sale),
             onPressed: () => showDialog(context: context, builder: (_) => RegisterDialog(controller: controller)),
           ),
+        const InstallAppButton(),
         IconButton(
           key: const Key('signOut'),
           tooltip: s.t('signOut'),

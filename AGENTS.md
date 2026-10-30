@@ -11,7 +11,7 @@
 > External contributors: fork the repository and open a pull request (`CONTRIBUTING.md`).
 
 MNSCloud POS (PDV/TPV) is a public Flutter client for the MNSCloud point of sale: the web version
-(online only, served by mnscloud-webapps at `/pos/`) and installed apps (Android, iOS, Windows,
+(an installable PWA shell that sells online only, served by mnscloud-webapps at `/pos/`) and installed apps (Android, iOS, Windows,
 macOS, Linux) that also sell offline within a server-issued authorization (`docs/capabilities.md`).
 
 ## Public Client Boundary
@@ -23,8 +23,10 @@ macOS, Linux) that also sell offline within a server-issued authorization (`docs
 - Money is exact decimal (`Money`), never `double`.
 - Every sale carries a client-generated UUID and a SHA-256 hash of its canonical JSON. A lost answer
   is resolved by reading the sale back and resending the same payload, never a new UUID.
-- The web build is online only: no web manifest, no service worker, no local storage of sales
-  (`scripts/check-web-online-only.sh`).
+- The web build is an installable PWA shell (decision U1, 2026-10-30): the runtime-kit service
+  worker caches only the app shell, never `/api`; sales, cart and session are never stored in the
+  browser, and a web sale always needs the connection (`scripts/check-web-no-offline-sales.sh`).
+  Offline sales exist only in the installed apps.
 - Pix is confirmed only by the gateway on the server; cards only with the terminal NSU. Store no card
   data beyond brand and last four digits.
 - Installed apps are local-first (`lib/src/offline/`): a sale or cash event and its sync operation
@@ -34,6 +36,6 @@ macOS, Linux) that also sell offline within a server-issued authorization (`docs
 
 ## Development
 
-- Run `flutter analyze`, `flutter test` and `bash scripts/check-web-online-only.sh`.
+- Run `flutter analyze`, `flutter test` and `bash scripts/check-web-no-offline-sales.sh`.
 - Keep UI touch-first, keyboard/barcode-scanner friendly and accessible.
 - Releases are cut by `.github/workflows/auto-release.yml` (`scripts/release-pos.sh`).

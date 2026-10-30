@@ -32,10 +32,10 @@ text.es: <...>
 - [ ] No secrets, credentials, customer data, production hosts, private topology or certificates.
 - [ ] Price, stock, payment and fiscal decisions remain API-side.
 - [ ] Money stays exact decimal; sales keep their client UUID and payload hash on retry.
-- [ ] The web build stays online only (no manifest, service worker or local sale storage).
+- [ ] The web build sells online only: the service worker caches the app shell only and no sale, cart or session is stored in the browser.
 
 ## Validation
 
 - [ ] `flutter analyze`
 - [ ] `flutter test`
-- [ ] `bash scripts/check-web-online-only.sh`
+- [ ] `bash scripts/check-web-no-offline-sales.sh`

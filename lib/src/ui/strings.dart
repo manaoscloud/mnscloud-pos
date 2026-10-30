@@ -180,6 +180,12 @@ class S {
     'cancel': {'pt': 'Cancelar', 'en': 'Cancel', 'es': 'Cancelar'},
     'confirm': {'pt': 'Confirmar', 'en': 'Confirm', 'es': 'Confirmar'},
     'close': {'pt': 'Fechar', 'en': 'Close', 'es': 'Cerrar'},
+    'installApp': {'pt': 'Instalar app', 'en': 'Install app', 'es': 'Instalar app'},
+    'installIosSteps': {
+      'pt': 'No Safari, toque em Compartilhar e depois em "Adicionar à Tela de Início".',
+      'en': 'In Safari, tap Share and then "Add to Home Screen".',
+      'es': 'En Safari, toca Compartir y luego "Agregar a pantalla de inicio".',
+    },
     'nsu': {'pt': 'NSU da maquininha', 'en': 'Terminal NSU', 'es': 'NSU del terminal'},
     'authCode': {'pt': 'Código de autorização', 'en': 'Authorization code', 'es': 'Código de autorización'},
     'cardHint': {
