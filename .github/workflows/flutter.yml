@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Weekly Apple builds (macOS runners cost about ten times Linux minutes).
+    - cron: "23 6 * * 2"
+  workflow_dispatch:
 
 
 # Read-only token: analysis, tests and builds publish nothing.
@@ -11,67 +15,29 @@ permissions:
   contents: read
 
 jobs:
+  client:
+    # Shared MNSCloud Flutter client gate (docs/flutter-client-standard.md in the workspace):
+    # pinned toolchain, native configuration check, analyze, test and one build per target.
+    # Installed targets carry the local-first offline sales; the web build stays online only.
+    uses: manaoscloud/mnscloud-runtime-kit/.github/workflows/flutter-client-ci.yml@main
+    with:
+      targets: "web,android,linux,windows,macos,ios"
+      web_mode: plain
+      web_check: bash scripts/check-web-online-only.sh
+      native_check_args: >-
+        --macos-entitlement com.apple.security.device.camera
+        --ios-plist-key NSCameraUsageDescription
+      # flutter_secure_storage on Linux.
+      linux_packages: "libsecret-1-dev"
+      apple: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+
   analyze-test:
+    # Required status check of main: passes only when every job of the shared gate passed.
+    needs: client
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-      - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze
-      - run: flutter test
-      - run: bash scripts/check-web-online-only.sh
-      - run: flutter build web --release --base-href /
-      - name: Web build stays online only
-        run: bash scripts/check-web-online-only.sh
-
-  # Installed targets (local-first offline sales): compile every platform; no signing or publishing.
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: analyze-test
-    steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev
-      - run: flutter build linux --release
-
-  build-android:
-    runs-on: ubuntu-latest
-    needs: analyze-test
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-      - run: flutter build apk --debug
-
-  build-windows:
-    runs-on: windows-latest
-    needs: analyze-test
-    steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-      - run: flutter build windows --release
-
-  build-apple:
-    runs-on: macos-latest
-    needs: analyze-test
-    steps:
-      - uses: actions/checkout@v6
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-      - run: flutter build macos --release
-      - run: flutter build ios --release --no-codesign
+      - run: test "${{ needs.client.result }}" = success
 
   sonarcloud:
     # SonarQube Cloud CI analysis (Dart is not covered by automatic analysis); shared and pinned in
@@ -79,3 +45,11 @@ jobs:
     uses: manaoscloud/mnscloud-runtime-kit/.github/workflows/sonarcloud-dart.yml@main
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  security:
+    # Shared security gate (Gitleaks, Trivy, Opengrep), pinned in mnscloud-runtime-kit.
+    uses: manaoscloud/mnscloud-runtime-kit/.github/workflows/security-scan.yml@main
+    with:
+      # No Dart rule set in opengrep-rules: scan the web loader and scripts only.
+      opengrep_rules: "javascript bash"
+      opengrep_exclude: "test"

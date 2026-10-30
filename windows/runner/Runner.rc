@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "cloud.manaos" "\0"
-            VALUE "FileDescription", "mnscloud_pos" "\0"
+            VALUE "CompanyName", "MNSCloud" "\0"
+            VALUE "FileDescription", "MNSCloud POS" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "mnscloud_pos" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 cloud.manaos. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 MNSCloud. All rights reserved." "\0"
             VALUE "OriginalFilename", "mnscloud_pos.exe" "\0"
-            VALUE "ProductName", "mnscloud_pos" "\0"
+            VALUE "ProductName", "MNSCloud POS" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
