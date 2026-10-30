@@ -20,8 +20,12 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Public Flutter client for the MNSCloud POS (PDV): online web and installed apps with offline operation.">
 
-  <!-- The web POS is online only: no manifest, service worker or install prompt. -->
+  <!-- Installable PWA shell (app shell cache only); web sales always need a connection. -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1565C0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="POS">
+  <link rel="manifest" href="manifest.json">
 
   <!-- MNSCloud POS icons; a tenant favicon (Settings › Themes › POS) replaces them at start. -->
   <link rel="icon" href="favicon.ico" sizes="any"/>

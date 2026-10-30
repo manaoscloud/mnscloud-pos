@@ -31,6 +31,9 @@ source "${RUNTIME_KIT_DIR}/lib/release.sh"
 # the default same-origin API base (/api/v1) and a portable root base href; the hosting runtime
 # rewrites <base href> to its own path.
 export MNSCLOUD_RUNTIME_KIT_DIR="$RUNTIME_KIT_DIR"
+# Installable PWA shell (decision U1): MNSCloud app-shell service worker, never the API or sales.
+pwa_generate='python3 "$MNSCLOUD_RUNTIME_KIT_DIR/scripts/flutter-pwa.py" generate --build-dir build/web --app pos'
+pwa_validate='python3 "$MNSCLOUD_RUNTIME_KIT_DIR/scripts/flutter-pwa.py" validate --build-dir build/web --base-href /'
 package_web_artifact='"$MNSCLOUD_RUNTIME_KIT_DIR/scripts/package-static-artifact.sh" --source-dir build/web --name "mnscloud-pos-web-v$(tr -d "[:space:]" < VERSION).tar.gz"'
 
 mrtk_release_prepare \
@@ -42,9 +45,11 @@ mrtk_release_prepare \
   --validate "grep -q '^version:' pubspec.yaml" \
   --validate "bash scripts/sync-app-build-info.sh" \
   --validate "flutter pub get" \
-  --validate "flutter build web --release --base-href /" \
+  --validate "flutter build web --release --base-href / --no-web-resources-cdn" \
   --validate "grep -qF '<base href=\"/\">' build/web/index.html" \
-  --validate "bash scripts/check-web-online-only.sh" \
+  --validate "$pwa_generate" \
+  --validate "$pwa_validate" \
+  --validate "bash scripts/check-web-no-offline-sales.sh" \
   --validate "$package_web_artifact" \
   --asset-glob "releases/mnscloud-pos-web-v*.tar.gz*" \
   "$@"

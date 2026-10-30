@@ -9,12 +9,12 @@ Use this repository for the public Flutter point-of-sale client (web online + in
   repository.
 - Keep price, discount, stock, payment confirmation and fiscal decisions in the MNSCloud API.
 - Exact decimals, client UUIDs and canonical payload hashes for every sale; retries reuse them.
-- The web build never becomes a PWA.
+- The web build is an installable PWA shell; it never stores or queues a sale in the browser.
 
 ## Validation
 
 ```bash
 flutter analyze
 flutter test
-bash scripts/check-web-online-only.sh
+bash scripts/check-web-no-offline-sales.sh
 ```

@@ -2,10 +2,11 @@
 
 Public Flutter client for the MNSCloud point of sale (PDV / POS / TPV).
 
-- **Web** — online only, served by `mnscloud-webapps` at `/pos/` with the same-origin API
-  (`/api/v1`). No PWA, no service worker, nothing persisted in the browser.
-- **Installed apps** — Android, iOS, Windows, macOS and Linux. Online today; offline sales within a
-  server-issued authorization are delivered in a later phase.
+- **Web** — installable PWA ("Install app" button; Add to Home Screen on iPhone/iPad), served by
+  `mnscloud-webapps` at `/pos/` with the same-origin API (`/api/v1`). The service worker caches only
+  the app shell; web sales always need the connection and nothing is persisted in the browser.
+- **Installed apps** — Android, iOS, Windows, macOS and Linux, with offline sales within a
+  server-issued authorization (`docs/capabilities.md`).
 
 The app talks only to `/api/v1/user/*` and `/api/v1/pos/*`. Terminals, price lists, stock, payments
 and fiscal documents are configured and decided by the MNSCloud API; the tenant must hold the
@@ -17,7 +18,7 @@ and fiscal documents are configured and decided by the MNSCloud API; the tenant 
 flutter pub get
 flutter analyze
 flutter test
-bash scripts/check-web-online-only.sh
+bash scripts/check-web-no-offline-sales.sh
 flutter run -d linux --dart-define=POS_API_BASE_URL=https://api.example.test/api/v1
 ```
 

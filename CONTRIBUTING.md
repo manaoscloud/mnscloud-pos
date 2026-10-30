@@ -16,5 +16,5 @@ Before opening a PR:
 ```bash
 flutter analyze
 flutter test
-bash scripts/check-web-online-only.sh
+bash scripts/check-web-no-offline-sales.sh
 ```

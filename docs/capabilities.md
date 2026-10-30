@@ -15,7 +15,9 @@
 | NFC-e issue (online, by the API) | yes (Fiscal module) | yes, as soon as the sale synchronizes |
 | NFC-e offline contingency (tpEmis 9) signed on the device | no (by design) | yes, only on terminals enabled by the manager (A1 key and CSC in the OS secure storage, own number range) |
 
-The web build never stores sales locally: a closed tab while a sale is in doubt is resolved by
+The web build is an installable PWA shell (decision U1, 2026-10-30): its service worker caches
+only the app shell of the release, so the app opens fast and, without a connection, says that sales
+need the network. It never stores sales locally: a closed tab while a sale is in doubt is resolved by
 reading the sale back from the API (`GET /pos/sales/{uuid}`).
 
 ## Installed apps (local-first)
