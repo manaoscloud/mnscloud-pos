@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "cloud.manaos.mnscloud_pos"
+    namespace = "cloud.manaos.mnscloud.pos"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "cloud.manaos.mnscloud_pos"
+        // Application id fixed by decision U4 (cloud.manaos.mnscloud.<app>); never change it after publication.
+        applicationId = "cloud.manaos.mnscloud.pos"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -31,7 +31,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
+            // Release signing (store keys from the GitHub Environment) arrives with native distribution (phase 4).
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
