@@ -1,5 +1,6 @@
 import '../core/canonical_json.dart';
 import '../core/models.dart';
+import '../version/client_identity.dart';
 import 'api_client.dart';
 
 class TenantOption {
@@ -98,6 +99,12 @@ class PosApi {
   final ApiClient client;
 
   String get _clientKind => client.isWebClient ? 'web' : 'native';
+
+  /// Minimum app versions per platform (public, no session); null while no API base is known.
+  Future<ClientVersionPolicy?> clientVersionPolicy() async {
+    if (client.baseUrl.isEmpty) return null;
+    return ClientVersionPolicy.fromJson(await client.get('public/clients/pos/policy'));
+  }
 
   Future<PosSessionGrant> signIn(String email, String password) async =>
       _apply(await client.post('pos/auth/signin', {'email': email, 'password': password, 'clientKind': _clientKind}));

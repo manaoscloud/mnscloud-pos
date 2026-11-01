@@ -11,7 +11,7 @@ void main() {
   late DateTime now;
 
   AppUpdateController controller() =>
-      AppUpdateController(reader: () async => null, runningVersion: '1.0.11', clock: () => now);
+      AppUpdateController(reader: () async => null, runningVersion: '1.0.11', web: true, clock: () => now);
 
   void announce(AppUpdateController update, RuntimeReleaseInfo build) {
     update.observe(build, t0);

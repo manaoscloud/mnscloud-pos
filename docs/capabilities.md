@@ -17,6 +17,7 @@
 | Reopen the app without the password: operator PIN, online or offline | no (refresh cookie, online) | yes: the POS session stays in the encrypted store; the PIN opens it |
 | NFC-e issue (online, by the API) | yes (Fiscal module) | yes, as soon as the sale synchronizes |
 | NFC-e offline contingency (tpEmis 9) signed on the device | no (by design) | yes, only on terminals enabled by the manager (A1 key and CSC in the OS secure storage, own number range) |
+| Update notice | new release while the page is open (`build.json`), "Update now" between sales | mandatory notice only, below the minimum version of the platform (`GET /public/clients/pos/policy` on start, every 6 hours and on resume, or an API 426 `CLIENT_VERSION_UNSUPPORTED`); fails open, offline sales and the outbox are kept |
 
 The web build is an installable PWA shell (decision U1, 2026-10-30): its service worker caches
 only the app shell of the release, so the app opens fast and, without a connection, says that sales

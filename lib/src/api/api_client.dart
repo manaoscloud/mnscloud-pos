@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../platform/session.dart';
+import '../version/client_identity.dart';
 
 /// Failure classes the UI explains differently.
 enum ApiFailureKind {
@@ -66,6 +67,10 @@ class ApiClient {
   /// internal operation. The server re-checks the operator's assignment on every request.
   String? commerceAccountUuid;
 
+  /// Called when the API refuses this app version (426 `CLIENT_VERSION_UNSUPPORTED`); the update
+  /// notice then becomes critical. Shared by every client of the app (foreground and sync).
+  static void Function()? onClientVersionUnsupported;
+
   /// Web bundle (refresh token in an HttpOnly cookie) or installed app (refresh token in memory).
   bool get isWebClient => isWebPlatform;
 
@@ -85,7 +90,7 @@ class ApiClient {
     final account = commerceAccountUuid;
     if (account != null && account.isNotEmpty) headers['X-Commerce-Account-UUID'] = account;
     if (idempotencyKey != null) headers['Idempotency-Key'] = idempotencyKey;
-    headers['X-Client-Name'] = 'mnscloud-pos';
+    headers.addAll(clientIdentityHeaders());
     return headers;
   }
 
@@ -146,6 +151,9 @@ class ApiClient {
       throw ApiException(ApiFailureKind.unreachable, 'The server cannot be reached.');
     }
     final decoded = _decode(response);
+    if (response.statusCode == 426 && decoded is Map && decoded['code'] == 'CLIENT_VERSION_UNSUPPORTED') {
+      onClientVersionUnsupported?.call();
+    }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return decoded is Map ? decoded['data'] : decoded;
     }
