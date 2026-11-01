@@ -16,10 +16,11 @@ Future<void> main() async {
   try {
     host = await openDeviceHost();
   } catch (_) {
-    host = null; // No local storage: the app still sells online.
+    host = null; // No local (encrypted) storage: the app still sells online.
   }
   final controller = PosController(PosApi(ApiClient()), host: host);
-  AppLifecycleListener(onResume: controller.syncNow);
+  // Back from the background: sync, and after OperatorPin.idle the operator PIN (installed apps).
+  AppLifecycleListener(onResume: controller.resumed, onHide: controller.backgrounded);
   runApp(PosApp(controller: controller));
   controller.loadBrand();
   controller.restore();

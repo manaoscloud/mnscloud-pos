@@ -7,6 +7,10 @@ abstract class OfflineStore {
   String? meta(String key);
   void setMeta(String key, String? value);
 
+  /// Sets [key] only while it still holds [expected] (null: absent), atomically across the
+  /// connections of the app and of the background sync. False when another writer changed it.
+  bool compareAndSetMeta(String key, String? expected, String? value);
+
   /// Next request counter, persisted before the request is sent (monotonic across restarts).
   int nextCounter();
 

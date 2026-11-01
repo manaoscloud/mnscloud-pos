@@ -5,6 +5,7 @@ import 'store.dart';
 /// Web build: online only, nothing is stored on the device.
 class DeviceHost implements FiscalSecrets {
   DeviceHost._();
+  factory DeviceHost.over(OfflineStore store) => DeviceHost._();
   OfflineStore get store => throw UnsupportedError('No local store on the web.');
   String get platform => 'web';
   Future<P256Key?> loadKey() async => null;

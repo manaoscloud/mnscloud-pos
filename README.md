@@ -6,7 +6,8 @@ Public Flutter client for the MNSCloud point of sale (PDV / POS / TPV).
   `mnscloud-webapps` at `/pos/` with the same-origin API (`/api/v1`). The service worker caches only
   the app shell; web sales always need the connection and nothing is persisted in the browser.
 - **Installed apps** — Android, iOS, Windows, macOS and Linux, with offline sales within a
-  server-issued authorization (`docs/capabilities.md`).
+  server-issued authorization, an encrypted local store, the operator PIN to reopen the app online
+  or offline, and background sync on Android and iOS (`docs/capabilities.md`).
 
 The app talks only to `/api/v1/user/*` and `/api/v1/pos/*`. Terminals, price lists, stock, payments
 and fiscal documents are configured and decided by the MNSCloud API; the tenant must hold the

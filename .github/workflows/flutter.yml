@@ -29,6 +29,7 @@ jobs:
       native_check_args: >-
         --macos-entitlement com.apple.security.device.camera
         --ios-plist-key NSCameraUsageDescription
+        --ios-plist-key BGTaskSchedulerPermittedIdentifiers
       # flutter_secure_storage on Linux.
       linux_packages: "libsecret-1-dev"
       apple: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}

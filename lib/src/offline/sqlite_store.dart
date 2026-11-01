@@ -9,6 +9,10 @@ import 'store.dart';
 /// SQLite store (WAL, synchronous FULL, versioned migrations with a file backup before each
 /// migration). Synchronous on purpose: POS writes are tiny and must be durable before the screen
 /// says "saved".
+///
+/// Installed apps open it encrypted with SQLite3MultipleCiphers (`PRAGMA key`, the bundled build of
+/// `package:sqlite3`, `hooks.user_defines` in pubspec.yaml) and a random key kept in the OS secure
+/// storage. A clear database of an older release is encrypted in place on the first open.
 class SqliteOfflineStore implements OfflineStore {
   SqliteOfflineStore._(this._db);
 
@@ -16,10 +20,13 @@ class SqliteOfflineStore implements OfflineStore {
 
   final Database _db;
 
-  /// Opens (or creates) the store at [path]; `:memory:` for tests.
-  static SqliteOfflineStore open(String path) {
-    if (path != ':memory:' && File(path).existsSync()) {
-      final probe = sqlite3.open(path);
+  /// Opens (or creates) the store at [path]; `:memory:` for tests. With [key] (hex), the file is
+  /// encrypted; a clear file of an older release is encrypted first.
+  static SqliteOfflineStore open(String path, {String? key}) {
+    final onDisk = path != ':memory:' && File(path).existsSync();
+    if (onDisk && key != null) encryptInPlace(path, key);
+    if (onDisk) {
+      final probe = _connect(path, key);
       final version = probe.select('PRAGMA user_version').first.values.first as int;
       probe.close();
       if (version != 0 && version < schemaVersion) {
@@ -27,13 +34,98 @@ class SqliteOfflineStore implements OfflineStore {
         File(path).copySync('$path.backup-v$version');
       }
     }
-    final db = sqlite3.open(path);
+    final db = _connect(path, key);
     db.execute('PRAGMA journal_mode = WAL');
     db.execute('PRAGMA synchronous = FULL');
     db.execute('PRAGMA foreign_keys = ON');
     final store = SqliteOfflineStore._(db);
     store._migrate();
     return store;
+  }
+
+  /// One connection; the background sync opens a second one, so writers wait instead of failing.
+  static Database _connect(String path, String? key) {
+    final db = sqlite3.open(path);
+    try {
+      if (key != null) {
+        if (!_hex.hasMatch(key)) throw ArgumentError('The database key must be hexadecimal.');
+        db.execute("PRAGMA key = '$key'");
+      }
+      db.execute('PRAGMA busy_timeout = 10000');
+      // Fails here, not later, when the key does not open the file.
+      db.select('SELECT count(*) FROM sqlite_master');
+      return db;
+    } catch (_) {
+      db.close();
+      rethrow;
+    }
+  }
+
+  static final _hex = RegExp(r'^[0-9a-f]{32,128}$');
+
+  /// True when the bundled SQLite encrypts (SQLite3MultipleCiphers answers `PRAGMA cipher`).
+  static bool get encryptionAvailable {
+    final db = sqlite3.openInMemory();
+    try {
+      return db.select('PRAGMA cipher').isNotEmpty;
+    } catch (_) {
+      return false;
+    } finally {
+      db.close();
+    }
+  }
+
+  /// Whether [path] is a clear (unencrypted) SQLite file.
+  static bool isPlain(String path) {
+    final db = sqlite3.open(path, mode: OpenMode.readOnly);
+    try {
+      db.select('SELECT count(*) FROM sqlite_master');
+      return true;
+    } on SqliteException {
+      return false;
+    } finally {
+      db.close();
+    }
+  }
+
+  /// Encrypts a clear database of an older release in place. The clear copy kept while it runs is
+  /// removed once the encrypted file opens with [key]; on any failure the clear file is put back,
+  /// so pending operations are never lost. Clear migration backups of older releases go too.
+  static void encryptInPlace(String path, String key) {
+    if (!isPlain(path)) return;
+    final plainCopy = File('$path.encrypting');
+    final db = sqlite3.open(path);
+    try {
+      // WAL content goes into the main file; rekey does not work in WAL mode.
+      db.execute('PRAGMA journal_mode = DELETE');
+      db.close();
+      File(path).copySync(plainCopy.path);
+      final rekey = sqlite3.open(path);
+      try {
+        rekey.execute("PRAGMA rekey = '$key'");
+      } finally {
+        rekey.close();
+      }
+      _connect(path, key).close();
+    } catch (_) {
+      try {
+        db.close();
+      } catch (_) {}
+      if (plainCopy.existsSync()) plainCopy.copySync(path);
+      rethrow;
+    } finally {
+      if (plainCopy.existsSync()) plainCopy.deleteSync();
+    }
+    for (final name in ['$path-wal', '$path-shm']) {
+      final file = File(name);
+      if (file.existsSync()) file.deleteSync();
+    }
+    final dir = File(path).parent;
+    final base = File(path).uri.pathSegments.last;
+    for (final entity in dir.listSync()) {
+      final name = entity.uri.pathSegments.last;
+      if (entity is File && name.startsWith('$base.backup-v') && isPlain(entity.path)) entity.deleteSync();
+    }
   }
 
   void _migrate() {
@@ -108,6 +200,13 @@ class SqliteOfflineStore implements OfflineStore {
           [key, value]);
     }
   }
+
+  @override
+  bool compareAndSetMeta(String key, String? expected, String? value) => _transaction(() {
+        if (meta(key) != expected) return false;
+        setMeta(key, value);
+        return true;
+      });
 
   @override
   int nextCounter() => _transaction(() {

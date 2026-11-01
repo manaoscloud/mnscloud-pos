@@ -189,11 +189,14 @@ class SyncEngine {
       final items = _items(page);
       final next = page['cursor'] as String;
       store.applyCatalogChanges(items, next);
+      _rememberBootstrapContext(page);
       if (page['done'] == true || next == cursor) break;
       cursor = next;
     }
   }
 
+  /// Device, grant (every page; a revoked grant arrives as null) and terminal
+  /// (first bootstrap page) as the server sees them now.
   void _rememberBootstrapContext(Map<String, dynamic> page) {
     for (final key in ['terminal', 'grant', 'device']) {
       if (page.containsKey(key)) store.setMeta(key, page[key] == null ? null : jsonEncode(page[key]));

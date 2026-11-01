@@ -66,7 +66,10 @@ void main() {
       'saleUUID': 'sale-1', 'terminalUUID': 'terminal-1', 'sessionUUID': session.uuid, 'contractVersion': 1,
       'occurredAt': now.toIso8601String(), 'items': [], 'payments': [], 'change': '0',
     };
-    final sale = device.recordSale('operator', base, Decimal.parse('15'), Decimal.parse('15'), cart);
+    // Only the operators of the grant sell offline.
+    expect(() => device.recordSale('operator', base, Decimal.parse('15'), Decimal.parse('15'), cart),
+        throwsA(isA<OfflineLimitException>()));
+    final sale = device.recordSale('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', base, Decimal.parse('15'), Decimal.parse('15'), cart);
     expect(sale['origin'], 'device');
     expect(device.localSession()!.expectedCash, Decimal.parse('65'));
     device.cashMovement('operator', session.uuid, 'withdrawal', Decimal.parse('20'), 'bank');

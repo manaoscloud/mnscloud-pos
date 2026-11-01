@@ -12,8 +12,11 @@ import '../core/money.dart';
 import '../offline/device_host.dart';
 import '../offline/device_runtime.dart';
 import '../offline/device_sync_api.dart' as device_api;
+import '../offline/background_sync.dart';
 import '../offline/p256.dart';
+import '../offline/session_vault.dart';
 import '../offline/sync_engine.dart';
+import '../security/operator_pin.dart';
 import '../fiscal/fiscal_device.dart';
 import '../platform/session.dart' show isWebPlatform, takeHandoffCode;
 import '../platform/brand_dom.dart';
@@ -29,9 +32,29 @@ enum PosStage { signIn, tenant, terminal, openSession, selling }
 /// whose terminal is provisioned on this device works local-first ([DeviceRuntime]): sales and
 /// cash events are stored on the device and synchronized, online or offline.
 class PosController extends ChangeNotifier {
-  PosController(this.api, {this.host}) {
+  PosController(this.api, {this.host, DateTime Function()? clock, int pinIterations = 60000})
+      : _clock = clock ?? DateTime.now,
+        vault = host == null ? null : SessionVault(host.store, clock: clock),
+        pin = host == null ? null : OperatorPin(host.store, iterations: pinIterations) {
     api.client.onSessionExpired = _renewSession;
   }
+
+  final DateTime Function() _clock;
+
+  /// Installed apps: the POS session kept in the encrypted store and the operator PIN that opens
+  /// it again (null on the web).
+  final SessionVault? vault;
+  final OperatorPin? pin;
+
+  /// The app was reopened or stayed in the background: the operator PIN is asked before anything.
+  bool locked = false;
+
+  /// Signed in on an installed app without a PIN for this operator yet: asked once.
+  bool needsPin = false;
+
+  static const _leaseOwner = 'app';
+  bool _holdingLease = false;
+  DateTime? _backgroundAt;
 
   final PosApi api;
 
@@ -146,8 +169,134 @@ class PosController extends ChangeNotifier {
         if (e.kind == ApiFailureKind.unreachable) connection = ConnectionStatus.unreachable;
       }
     }
+    final v = vault;
+    if (v != null && v.hasSession) {
+      if (pin!.isSetFor(v.user!['uuid'].toString())) {
+        // Installed app reopened: the operator PIN first, then online or offline.
+        locked = true;
+        stage = PosStage.signIn;
+        notifyListeners();
+        return;
+      }
+      v.clear(); // A stored session without its operator PIN is never resumed.
+    }
     stage = PosStage.signIn;
     notifyListeners();
+  }
+
+  /// Checks the operator PIN. Null when it opened the app; otherwise the attempts left (at 0 the
+  /// stored session ends and the operator signs in again; pending sales stay on the device).
+  Future<int?> unlock(String code) async {
+    final p = pin;
+    if (p == null || !locked) return null;
+    final left = p.verify(code);
+    if (left != null) {
+      if (left == 0) {
+        locked = false;
+        _endSession(message: 'Too many wrong PINs. Sign in again.');
+      } else {
+        notifyListeners();
+      }
+      return left;
+    }
+    locked = false;
+    if (user != null) {
+      // Unlocked after the background: everything on screen stays as it was.
+      notifyListeners();
+      unawaited(syncNow());
+      return null;
+    }
+    await _resume();
+    return null;
+  }
+
+  /// Stored session after the PIN: renewed online, or the provisioned register opened offline.
+  Future<void> _resume() async {
+    final v = vault!;
+    final stored = v.user!;
+    user = SignedInUser(
+      uuid: stored['uuid'].toString(),
+      name: stored['name']?.toString() ?? '',
+      email: stored['email']?.toString() ?? '',
+    );
+    busy = true;
+    notifyListeners();
+    try {
+      final grant = await _rotate();
+      connection = ConnectionStatus.online;
+      busy = false;
+      await _started(grant, environmentUuid: v.tenant?['uuid']?.toString(), terminalUuid: _storedTerminalUuid());
+    } on ApiException catch (e) {
+      busy = false;
+      if (e.kind == ApiFailureKind.unreachable) {
+        connection = ConnectionStatus.unreachable;
+        await _resumeOffline();
+        // Renewed (and synced) as soon as the API answers again.
+        _scheduleRenewal(90);
+        return;
+      }
+      _endSession(message: 'Your POS session ended. Sign in again.');
+    }
+  }
+
+  String? _storedTerminalUuid() {
+    final raw = host?.store.meta('terminal');
+    if (raw == null) return null;
+    final value = (jsonDecode(raw) as Map)['PtmUUID'];
+    return value == null ? null : normalizeUuid(value.toString());
+  }
+
+  /// No connection: only a register provisioned on this device opens, with its local cash
+  /// session and within its offline grant.
+  Future<void> _resumeOffline() async {
+    final h = host!;
+    final t = vault!.tenant;
+    final raw = h.store.meta('terminal');
+    if (t == null || raw == null) return _offlineUnavailable();
+    final stored = PosTerminal.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
+    tenant = TenantOption(t['uuid'].toString(), t['name']?.toString() ?? '', t['code']?.toString());
+    api.client.environmentUuid = tenant!.uuid;
+    if (!await _attachDevice(stored)) return _offlineUnavailable();
+    terminal = stored;
+    session = device!.localSession();
+    stage = session == null ? PosStage.openSession : PosStage.selling;
+    notifyListeners();
+  }
+
+  void _offlineUnavailable() {
+    stage = PosStage.signIn;
+    error = 'No connection, and no register of this device is enabled to sell offline. Try again when the connection returns.';
+    notifyListeners();
+  }
+
+  /// Creates the PIN of the signed-in operator (installed apps).
+  void createPin(String code) {
+    final u = user;
+    if (u == null || pin == null) return;
+    pin!.set(u.uuid, code);
+    needsPin = false;
+    notifyListeners();
+  }
+
+  /// Locks the screen now (shared register): the PIN opens it again with everything as it was.
+  void lockNow() {
+    if (pin == null || user == null || !pin!.isSetFor(user!.uuid)) return;
+    locked = true;
+    notifyListeners();
+  }
+
+  /// App lifecycle (installed apps): back from the background after [OperatorPin.idle] asks for the
+  /// PIN; the background sync stays out while the app is in front.
+  void backgrounded() {
+    _backgroundAt = _clock();
+    vault?.markBackground();
+  }
+
+  void resumed() {
+    final since = _backgroundAt;
+    _backgroundAt = null;
+    if (since != null && _clock().difference(since) >= OperatorPin.idle) lockNow();
+    unawaited(syncNow());
   }
 
   /// Sign-in code from the App: opens the tenant and register chosen there.
@@ -170,10 +319,49 @@ class PosController extends ChangeNotifier {
   Timer? _renewTimer;
   Future<bool>? _renewing;
 
-  Future<void> _started(PosSessionGrant grant) async {
+  Future<void> _started(PosSessionGrant grant, {String? environmentUuid, String? terminalUuid}) async {
     user = grant.user;
+    _remember(grant);
     _scheduleRenewal(grant.expiresIn);
-    await _afterSignIn(environmentUuid: grant.environmentUuid, terminalUuid: grant.terminalUuid);
+    await _afterSignIn(
+      environmentUuid: grant.environmentUuid ?? environmentUuid,
+      terminalUuid: grant.terminalUuid ?? terminalUuid,
+    );
+    final p = pin;
+    if (p != null && user != null && !p.isSetFor(user!.uuid)) {
+      needsPin = true;
+      notifyListeners();
+    }
+  }
+
+  /// Installed apps keep the rotated refresh token and who signed in, in the encrypted store.
+  void _remember(PosSessionGrant grant) {
+    final v = vault;
+    if (v == null || api.client.isWebClient) return;
+    final token = grant.refreshToken ?? api.client.refreshToken;
+    if (token != null) v.saveRefreshToken(token);
+    v.saveUser(uuid: grant.user.uuid, name: grant.user.name, email: grant.user.email);
+    v.saveApiBase(api.client.baseUrl);
+  }
+
+  /// Renews the POS session. Installed apps read the refresh token from the store under the sync
+  /// lease (the background sync may have rotated it) and store the new one at once.
+  Future<PosSessionGrant> _rotate() async {
+    final v = vault;
+    if (v == null || api.client.isWebClient) return api.refresh();
+    Future<PosSessionGrant> renew() async {
+      api.client.refreshToken = v.refreshToken;
+      final grant = await api.refresh();
+      v.saveRefreshToken(grant.refreshToken ?? api.client.refreshToken);
+      return grant;
+    }
+
+    if (_holdingLease) return renew();
+    final grant = await v.withLease(_leaseOwner, renew);
+    if (grant == null) {
+      throw ApiException(ApiFailureKind.unreachable, 'The background sync is running; trying again shortly.');
+    }
+    return grant;
   }
 
   /// Renews the access token one minute before it expires, so requests rarely meet a 401.
@@ -190,8 +378,10 @@ class PosController extends ChangeNotifier {
   Future<bool> _renew() async {
     if (user == null) return false;
     try {
-      final grant = await api.refresh();
+      final grant = await _rotate();
       user = grant.user;
+      _remember(grant);
+      connection = ConnectionStatus.online;
       _scheduleRenewal(grant.expiresIn);
       return true;
     } on ApiException catch (e) {
@@ -235,6 +425,7 @@ class PosController extends ChangeNotifier {
   Future<void> selectTenant(TenantOption option) async {
     tenant = option;
     api.client.environmentUuid = option.uuid;
+    vault?.saveTenant(uuid: option.uuid, name: option.name, code: option.code);
     final list = await _run(api.terminals);
     if (list == null) return;
     terminals = list;
@@ -294,6 +485,11 @@ class PosController extends ChangeNotifier {
     _renewTimer?.cancel();
     _renewTimer = null;
     _detachDevice();
+    // The stored session and the PIN go; pending sales, the device key and its grant stay.
+    vault?.clear();
+    pin?.clear();
+    locked = false;
+    needsPin = false;
     api.client.bearerToken = null;
     api.client.refreshToken = null;
     api.client.environmentUuid = null;
@@ -721,6 +917,7 @@ class PosController extends ChangeNotifier {
     );
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) => syncNow());
+    unawaited(scheduleBackgroundSync());
   }
 
   void _detachDevice() {
@@ -753,6 +950,21 @@ class PosController extends ChangeNotifier {
   Future<void> syncNow() async {
     final d = device;
     if (d == null) return;
+    final v = vault;
+    if (v == null) return _sync(d);
+    if (_backgroundAt == null) v.markForeground();
+    // One sync at a time with the background task: it holds the lease, this tick is skipped.
+    await v.withLease(_leaseOwner, () async {
+      _holdingLease = true;
+      try {
+        await _sync(d);
+      } finally {
+        _holdingLease = false;
+      }
+    });
+  }
+
+  Future<void> _sync(DeviceRuntime d) async {
     try {
       final report = await d.engine.sync();
       connection = report.reachable ? ConnectionStatus.online : ConnectionStatus.unreachable;
@@ -769,6 +981,8 @@ class PosController extends ChangeNotifier {
       }
     } on ApiException catch (e) {
       if (e.code == 'DEVICE_SUSPENDED' || e.code == 'DEVICE_REVOKED') {
+        // No more offline sales under a grant of a blocked device.
+        d.store.setMeta('grant', null);
         syncMessage = 'This device was blocked by the server (${e.code}). Ask the manager to provision it again.';
       } else {
         syncMessage = e.message;
@@ -779,9 +993,19 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _disposed = false;
+
+  /// A sync or renewal that finishes after the screen is gone changes nothing on it.
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     _syncTimer?.cancel();
+    _renewTimer?.cancel();
     super.dispose();
   }
 }

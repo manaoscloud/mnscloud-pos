@@ -42,8 +42,9 @@ dependencies:
   crypto: ^3.0.6
   qr_flutter: ^4.1.0
   pointycastle: ^4.0.0
-  sqlite3: ^3.7.1
+  sqlite3: ^3.8.0
   flutter_secure_storage: ^11.2.0
+  workmanager: ^0.10.10
   path_provider: ^2.1.6
   path: ^1.9.1
   mobile_scanner: ^7.4.2
@@ -100,3 +101,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Encrypted offline store of installed apps: SQLite3MultipleCiphers bundled by package:sqlite3
+# (key from the OS secure storage, lib/src/offline/device_host_io.dart).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
