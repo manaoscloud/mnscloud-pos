@@ -100,7 +100,8 @@ class ApiClient {
             body: jsonEncode(body ?? const {}),
           )));
 
-  /// Request with extra headers built from the exact URI and body text (device signatures).
+  /// Request with extra headers built from the exact URI and body text (device signatures); an
+  /// empty extra header removes that header (a device of the internal operation sends no account).
   Future<dynamic> signed(
     String method,
     String path, {
@@ -111,7 +112,7 @@ class ApiClient {
     final uri = _uri(path, query);
     final text = body == null ? '' : jsonEncode(body);
     final base = _headers(write: body != null);
-    final all = {...base, ...headers(uri, text)};
+    final all = {...base, ...headers(uri, text)}..removeWhere((_, value) => value.isEmpty);
     return _send(() => method == 'GET'
         ? _http.get(uri, headers: all)
         : _http.post(uri, headers: all, body: text));

@@ -57,6 +57,11 @@ abstract class OfflineStore {
   String? operationStatus(String operationUuid);
   List<OutboxEntry> problemOperations({int limit = 50});
 
+  /// Forgets the previous device before another one is provisioned: catalog, cursors, grant,
+  /// terminal, fiscal configuration and scope. The outbox history, local records and the request
+  /// counter stay.
+  void resetDevice();
+
   void close();
 }
 

@@ -261,7 +261,9 @@ class PosController extends ChangeNotifier {
     final stored = PosTerminal.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
     tenant = TenantOption(t['uuid'].toString(), t['name']?.toString() ?? '', t['code']?.toString());
     api.client.environmentUuid = tenant!.uuid;
-    api.client.commerceAccountUuid = vault!.account;
+    // The register of this device opens in the device's shop, even if another one was chosen last.
+    final scope = device_api.deviceScope(h.store)['X-Commerce-Account-UUID'];
+    api.client.commerceAccountUuid = scope == null ? vault!.account : (scope.isEmpty ? null : scope);
     if (!await _attachDevice(stored)) return _offlineUnavailable();
     terminal = stored;
     session = device!.localSession();
@@ -944,6 +946,9 @@ class PosController extends ChangeNotifier {
   }
 
   void _startDevice(DeviceHost h, P256Key key, String deviceUuid, String terminalUuid) {
+    // Device requests (here and in the background sync) go to the device's tenant.
+    final environment = api.client.environmentUuid;
+    if (environment != null && h.store.meta('device_environment') == null) h.store.setMeta('device_environment', environment);
     final transport = device_api.DeviceSyncApi(api.client, h.store, key, deviceUuid, appVersion: appBuildInfo.version);
     _fiscal = FiscalDevice(h.store, h, transport);
     device = DeviceRuntime(
@@ -969,11 +974,20 @@ class PosController extends ChangeNotifier {
     final h = host;
     final t = terminal;
     if (h == null || t == null) return false;
+    // Operations of the previous device of this installation are pushed by that device only.
+    final counts = h.store.outboxCounts();
+    if (h.store.meta('device') != null && (counts['pending'] ?? 0) + (counts['retry'] ?? 0) > 0) {
+      error = 'This installation still has operations of another register to synchronize. Open that register online first.';
+      notifyListeners();
+      return false;
+    }
     final key = P256Key.generate();
     final row = await _run(() => device_api.provisionDevice(api.client,
         key: key, terminalUuid: t.uuid, name: name, platform: h.platform, appVersion: appBuildInfo.version));
     if (row == null) return false;
     await h.saveKey(key);
+    // A new device starts clean: no catalog, cursor, grant or terminal of the previous one.
+    h.store.resetDevice();
     h.store.setMeta('device', jsonEncode(row));
     _startDevice(h, key, normalizeUuid(row['SdvUUID'].toString()), t.uuid);
     session = device!.localSession();
@@ -1021,6 +1035,11 @@ class PosController extends ChangeNotifier {
         // No more offline sales under a grant of a blocked device.
         d.store.setMeta('grant', null);
         syncMessage = 'This device was blocked by the server (${e.code}). Ask the manager to provision it again.';
+      } else if (e.code == 'COMMERCE_ACCOUNT_FORBIDDEN') {
+        // Shop suspended or access removed: pending operations stay (the push drains them), no
+        // new offline sales.
+        d.store.setMeta('grant', null);
+        syncMessage = 'This shop is unavailable. Pending sales stay on the device and are sent when it is released.';
       } else {
         syncMessage = e.message;
       }

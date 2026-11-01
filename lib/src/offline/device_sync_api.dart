@@ -8,7 +8,8 @@ import 'store.dart';
 import 'sync_engine.dart';
 
 /// Signed `/pos/sync/*` transport: every request carries the device id, a monotonic counter
-/// (persisted before sending), the time and an ECDSA P-256 signature of the exact request.
+/// (persisted before sending), the time and an ECDSA P-256 signature of the exact request. It is
+/// sent in the device's own scope ([deviceScope]), whatever tenant or shop the screen shows.
 class DeviceSyncApi implements SyncTransport, FiscalTransport {
   DeviceSyncApi(this.client, this.store, this.key, this.deviceUuid, {this.appVersion});
 
@@ -29,6 +30,7 @@ class DeviceSyncApi implements SyncTransport, FiscalTransport {
       'X-Device-Timestamp': timestamp,
       'X-Device-Signature': key.sign(message),
       'X-App-Version': ?appVersion,
+      ...deviceScope(store),
     };
   }
 
@@ -57,6 +59,21 @@ class DeviceSyncApi implements SyncTransport, FiscalTransport {
   @override
   Future<Map<String, dynamic>> allocateRange(String environment) =>
       _call('POST', 'pos/sync/fiscal/ranges', body: {'environment': environment});
+}
+
+/// Tenant and customer shop of the provisioned device: the tenant stored when the device was
+/// provisioned or attached, and the terminal's shop from the device row (null: the internal
+/// operation, sent without an account). Rows of servers older than the account field keep the
+/// session's headers.
+Map<String, String> deviceScope(OfflineStore store) {
+  final environment = store.meta('device_environment');
+  final raw = store.meta('device');
+  final row = raw == null ? null : jsonDecode(raw);
+  return {
+    'X-Environment-UUID': ?environment,
+    if (row is Map && row.containsKey('CommerceAccountUUID'))
+      'X-Commerce-Account-UUID': row['CommerceAccountUUID']?.toString() ?? '',
+  };
 }
 
 /// Registers this installation for a terminal: a new key pair, the public key and a proof of
