@@ -9,6 +9,15 @@ class TenantOption {
   final String? code;
 }
 
+/// Commerce account the operator can sell for: the internal operation or a customer shop.
+class CommerceAccountOption {
+  CommerceAccountOption(this.uuid, this.name, this.kind);
+  final String uuid;
+  final String name;
+  final String kind;
+  bool get isCustomer => kind == 'customer';
+}
+
 class SignedInUser {
   SignedInUser({required this.uuid, required this.name, required this.email});
   final String uuid;
@@ -26,6 +35,7 @@ class PosSessionGrant {
     this.refreshToken,
     this.environmentUuid,
     this.terminalUuid,
+    this.commerceAccountUuid,
   });
   final SignedInUser user;
   final String accessToken;
@@ -39,6 +49,9 @@ class PosSessionGrant {
   /// Tenant and register chosen in the App (handoff only).
   final String? environmentUuid;
   final String? terminalUuid;
+
+  /// Customer shop of that register (handoff only); null for the internal operation.
+  final String? commerceAccountUuid;
 
   static PosSessionGrant fromData(dynamic data) {
     final map = data is Map ? data : const {};
@@ -60,6 +73,7 @@ class PosSessionGrant {
       refreshToken: text(map['refreshToken']),
       environmentUuid: text(map['environmentUUID']),
       terminalUuid: text(map['terminalUUID']),
+      commerceAccountUuid: text(map['commerceAccountUUID']),
     );
   }
 }
@@ -121,6 +135,28 @@ class PosApi {
               r['TenantCode']?.toString(),
             ))
         .where((t) => t.uuid.isNotEmpty)
+        .toList();
+  }
+
+  /// Accounts the operator may open in the POS (server decides assignment and service state).
+  Future<List<CommerceAccountOption>> accounts() async {
+    dynamic data;
+    try {
+      data = await client.get('pos/accounts', {'limit': '200'});
+    } on ApiException catch (e) {
+      // A server without commerce accounts in the POS: the internal operation only.
+      if (e.status == 404) return const [];
+      rethrow;
+    }
+    final rows = data is Map ? (data['items'] ?? const []) : const [];
+    return (rows as List)
+        .whereType<Map>()
+        .map((r) => CommerceAccountOption(
+              (r['CmaUUID'] ?? '').toString(),
+              (r['CmaName'] ?? '').toString(),
+              (r['CmaKind'] ?? '').toString(),
+            ))
+        .where((a) => a.uuid.isNotEmpty)
         .toList();
   }
 

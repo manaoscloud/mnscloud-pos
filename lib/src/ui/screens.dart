@@ -41,12 +41,13 @@ class PosHome extends StatelessWidget {
           final body = switch (controller.stage) {
             PosStage.signIn => SignInView(controller: controller),
             PosStage.tenant => TenantView(controller: controller),
+            PosStage.account => AccountView(controller: controller),
             PosStage.terminal => TerminalView(controller: controller),
             PosStage.openSession => OpenSessionView(controller: controller),
             PosStage.selling => SellingView(controller: controller),
           };
           // Sign-in, company and register follow Settings › Themes › Login do POS.
-          if (const {PosStage.signIn, PosStage.tenant, PosStage.terminal}.contains(controller.stage)) {
+          if (const {PosStage.signIn, PosStage.tenant, PosStage.account, PosStage.terminal}.contains(controller.stage)) {
             return _accessScaffold(context, body);
           }
           return _workScaffold(context, body);
@@ -407,6 +408,32 @@ class TenantView extends StatelessWidget {
   }
 }
 
+/// Internal operation or one of the customer shops the operator is assigned to.
+class AccountView extends StatelessWidget {
+  const AccountView({super.key, required this.controller});
+  final PosController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _SignedInAs(controller: controller),
+      AccessHeading(
+        eyebrow: controller.tenant?.name ?? accessText(context, controller.brand.value, 'eyebrow'),
+        title: s.t('chooseAccount'),
+        subtitle: s.t('chooseAccountHint'),
+      ),
+      for (final a in controller.accounts)
+        _AccessChoice(
+          icon: a.isCustomer ? Icons.storefront : Icons.apartment,
+          title: a.name.isEmpty ? a.uuid : a.name,
+          subtitle: a.isCustomer ? s.t('customerShop') : s.t('internalOperation'),
+          onTap: () => controller.selectAccount(a),
+        ),
+    ]);
+  }
+}
+
 class TerminalView extends StatelessWidget {
   const TerminalView({super.key, required this.controller});
   final PosController controller;
@@ -417,7 +444,9 @@ class TerminalView extends StatelessWidget {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _SignedInAs(controller: controller),
       AccessHeading(
-        eyebrow: controller.tenant?.name ?? accessText(context, controller.brand.value, 'eyebrow'),
+        eyebrow: controller.account?.isCustomer == true
+            ? controller.account!.name
+            : controller.tenant?.name ?? accessText(context, controller.brand.value, 'eyebrow'),
         title: s.t('chooseTerminal'),
         subtitle: s.t('chooseTerminalHint'),
       ),

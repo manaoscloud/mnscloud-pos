@@ -25,7 +25,7 @@ import '../version/app_build_info.dart';
 
 enum ConnectionStatus { online, unreachable, unknown }
 
-enum PosStage { signIn, tenant, terminal, openSession, selling }
+enum PosStage { signIn, tenant, account, terminal, openSession, selling }
 
 /// Single source of truth of the POS screen state. On the web nothing is persisted locally: the
 /// cart lives in memory and only a server confirmation shows a sale as saved. An installed app
@@ -103,6 +103,10 @@ class PosController extends ChangeNotifier {
   SignedInUser? user;
   List<TenantOption> tenants = const [];
   TenantOption? tenant;
+
+  /// Accounts of the tenant the operator may sell for; [account] null = internal operation.
+  List<CommerceAccountOption> accounts = const [];
+  CommerceAccountOption? account;
   List<PosTerminal> terminals = const [];
   PosTerminal? terminal;
   CashSession? session;
@@ -225,7 +229,8 @@ class PosController extends ChangeNotifier {
       final grant = await _rotate();
       connection = ConnectionStatus.online;
       busy = false;
-      await _started(grant, environmentUuid: v.tenant?['uuid']?.toString(), terminalUuid: _storedTerminalUuid());
+      await _started(grant,
+          environmentUuid: v.tenant?['uuid']?.toString(), terminalUuid: _storedTerminalUuid(), accountUuid: v.account);
     } on ApiException catch (e) {
       busy = false;
       if (e.kind == ApiFailureKind.unreachable) {
@@ -256,6 +261,7 @@ class PosController extends ChangeNotifier {
     final stored = PosTerminal.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
     tenant = TenantOption(t['uuid'].toString(), t['name']?.toString() ?? '', t['code']?.toString());
     api.client.environmentUuid = tenant!.uuid;
+    api.client.commerceAccountUuid = vault!.account;
     if (!await _attachDevice(stored)) return _offlineUnavailable();
     terminal = stored;
     session = device!.localSession();
@@ -319,13 +325,14 @@ class PosController extends ChangeNotifier {
   Timer? _renewTimer;
   Future<bool>? _renewing;
 
-  Future<void> _started(PosSessionGrant grant, {String? environmentUuid, String? terminalUuid}) async {
+  Future<void> _started(PosSessionGrant grant, {String? environmentUuid, String? terminalUuid, String? accountUuid}) async {
     user = grant.user;
     _remember(grant);
     _scheduleRenewal(grant.expiresIn);
     await _afterSignIn(
       environmentUuid: grant.environmentUuid ?? environmentUuid,
       terminalUuid: grant.terminalUuid ?? terminalUuid,
+      accountUuid: grant.commerceAccountUuid ?? accountUuid,
     );
     final p = pin;
     if (p != null && user != null && !p.isSetFor(user!.uuid)) {
@@ -400,7 +407,8 @@ class PosController extends ChangeNotifier {
     }
   }
 
-  Future<void> _afterSignIn({String? environmentUuid, String? terminalUuid}) async {
+  Future<void> _afterSignIn({String? environmentUuid, String? terminalUuid, String? accountUuid}) async {
+    _handoffAccount = accountUuid;
     final list = await _run(api.tenants);
     if (list == null) return;
     tenants = list;
@@ -422,10 +430,35 @@ class PosController extends ChangeNotifier {
   static bool _sameUuid(String a, String b) =>
       a.replaceAll('-', '').toLowerCase() == b.replaceAll('-', '').toLowerCase();
 
+  /// Customer shop chosen in the App (handoff), applied once when its tenant opens.
+  String? _handoffAccount;
+
   Future<void> selectTenant(TenantOption option) async {
     tenant = option;
     api.client.environmentUuid = option.uuid;
     vault?.saveTenant(uuid: option.uuid, name: option.name, code: option.code);
+    api.client.commerceAccountUuid = null;
+    account = null;
+    final list = await _run(api.accounts);
+    if (list == null) return;
+    accounts = list;
+    final handoff = _handoffAccount;
+    _handoffAccount = null;
+    final preferred = handoff == null ? null : list.where((a) => _sameUuid(a.uuid, handoff)).firstOrNull;
+    if (preferred != null || list.length <= 1) {
+      await selectAccount(preferred ?? list.firstOrNull);
+    } else {
+      stage = PosStage.account;
+      notifyListeners();
+    }
+  }
+
+  /// Opens the registers of one account: a customer shop sends its account on every request, the
+  /// internal operation (or a tenant without accounts) sends none.
+  Future<void> selectAccount(CommerceAccountOption? option) async {
+    account = option;
+    api.client.commerceAccountUuid = option != null && option.isCustomer ? option.uuid : null;
+    vault?.saveAccount(api.client.commerceAccountUuid);
     final list = await _run(api.terminals);
     if (list == null) return;
     terminals = list;
@@ -493,9 +526,13 @@ class PosController extends ChangeNotifier {
     api.client.bearerToken = null;
     api.client.refreshToken = null;
     api.client.environmentUuid = null;
+    api.client.commerceAccountUuid = null;
     user = null;
     tenants = const [];
     tenant = null;
+    accounts = const [];
+    account = null;
+    _handoffAccount = null;
     terminals = const [];
     terminal = null;
     session = null;

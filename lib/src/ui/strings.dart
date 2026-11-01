@@ -113,6 +113,14 @@ class S {
     'privacy': {'pt': 'Privacidade', 'en': 'Privacy', 'es': 'Privacidad'},
     'terms': {'pt': 'Termos de uso', 'en': 'Terms of use', 'es': 'Términos de uso'},
     'signedInAs': {'pt': 'Conectado como', 'en': 'Signed in as', 'es': 'Conectado como'},
+    'chooseAccount': {'pt': 'Escolha a loja', 'en': 'Choose the shop', 'es': 'Elija la tienda'},
+    'chooseAccountHint': {
+      'pt': 'Selecione a operação própria ou a loja de cliente em que você vai vender.',
+      'en': 'Select your own operation or the customer shop you will sell for.',
+      'es': 'Seleccione la operación propia o la tienda de cliente para la que va a vender.',
+    },
+    'customerShop': {'pt': 'Loja de cliente', 'en': 'Customer shop', 'es': 'Tienda de cliente'},
+    'internalOperation': {'pt': 'Operação própria', 'en': 'Own operation', 'es': 'Operación propia'},
     'chooseTenantHint': {
       'pt': 'Selecione a empresa em que você vai vender.',
       'en': 'Select the company you will sell for.',
