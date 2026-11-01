@@ -5,4 +5,4 @@ import 'dart:io';
 Future<bool> cameraScanSupported() async => Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
 
 /// Nothing to configure outside the web.
-void prepareCameraScanner() {}
+Future<void> prepareCameraScanner() async {}
