@@ -89,6 +89,9 @@ class RefreshApi extends PosApi {
   Future<List<TenantOption>> tenants() async => [TenantOption(tenantUuid, 'Loja', null)];
 
   @override
+  Future<List<CommerceAccountOption>> accounts() async => [];
+
+  @override
   Future<List<PosTerminal>> terminals() async => [];
 }
 

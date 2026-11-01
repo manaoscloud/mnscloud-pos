@@ -62,6 +62,10 @@ class ApiClient {
   /// Active tenant (`X-Environment-UUID`).
   String? environmentUuid;
 
+  /// Customer commerce account (shop) being operated (`X-Commerce-Account-UUID`); null for the
+  /// internal operation. The server re-checks the operator's assignment on every request.
+  String? commerceAccountUuid;
+
   /// Web bundle (refresh token in an HttpOnly cookie) or installed app (refresh token in memory).
   bool get isWebClient => isWebPlatform;
 
@@ -78,6 +82,8 @@ class ApiClient {
     if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
     final env = environmentUuid;
     if (env != null && env.isNotEmpty) headers['X-Environment-UUID'] = env;
+    final account = commerceAccountUuid;
+    if (account != null && account.isNotEmpty) headers['X-Commerce-Account-UUID'] = account;
     if (idempotencyKey != null) headers['Idempotency-Key'] = idempotencyKey;
     headers['X-Client-Name'] = 'mnscloud-pos';
     return headers;

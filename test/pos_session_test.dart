@@ -12,7 +12,7 @@ const tenantB = '0b0b0b0b-0000-4000-8000-00000000000b';
 const terminal1 = '11111111-0000-4000-8000-000000000001';
 const terminal2 = '22222222-0000-4000-8000-000000000002';
 
-Map<String, dynamic> grant(String access, {String? refresh, String? environment, String? terminal}) => {
+Map<String, dynamic> grant(String access, {String? refresh, String? environment, String? terminal, String? account}) => {
       'data': {
         'accessToken': access,
         'tokenType': 'Bearer',
@@ -28,6 +28,7 @@ Map<String, dynamic> grant(String access, {String? refresh, String? environment,
         },
         'environmentUUID': environment,
         'terminalUUID': terminal,
+        'commerceAccountUUID': account,
       },
     };
 
@@ -40,6 +41,10 @@ Map<String, dynamic> terminalRow(String uuid, String name) => {
       'PtmMaxDiscountPercent': '0',
       'PtmOfflineEnabled': 0,
     };
+
+const internalAccount = '99999999-9999-4999-8999-999999999999';
+const shopX = '77777777-7777-4777-8777-777777777777';
+const shopY = '88888888-8888-4888-8888-888888888888';
 
 /// Fake MNSCloud API: POS session routes, identity reads and terminals. Records every request.
 class FakeApi {
@@ -70,6 +75,10 @@ class FakeApi {
         validToken = 'access-${refreshes + 1}';
         return json(grant(validToken, refresh: 'refresh-${refreshes + 1}'));
       case 'pos/auth/exchange':
+        if (body['code'] == 'shop-code') {
+          validToken = 'access-1';
+          return json(grant('access-1', environment: tenantA, terminal: terminal2, account: shopX));
+        }
         if (body['code'] != 'app-code') {
           return json({'error': 'The sign-in link expired or was used.', 'code': 'POS_HANDOFF_INVALID'}, 401);
         }
@@ -89,6 +98,21 @@ class FakeApi {
           'access': [
             {'EnvironmentUUID': tenantA, 'EnvironmentName': 'Loja A'},
             {'EnvironmentUUID': tenantB, 'EnvironmentName': 'Loja B'},
+          ],
+        },
+      });
+    }
+    if (path == 'pos/accounts') {
+      // Tenant A has the internal operation and two shops; tenant B only the internal one.
+      final tenant = request.headers['X-Environment-UUID'];
+      return json({
+        'data': {
+          'items': [
+            {'CmaUUID': internalAccount, 'CmaName': 'INTERNAL', 'CmaKind': 'internal'},
+            if (tenant == tenantA) ...[
+              {'CmaUUID': shopX, 'CmaName': 'Loja X', 'CmaKind': 'customer'},
+              {'CmaUUID': shopY, 'CmaName': 'Loja Y', 'CmaKind': 'customer'},
+            ],
           ],
         },
       });
@@ -203,6 +227,31 @@ void main() {
     expect(c.api.client.environmentUuid, tenantB);
     expect(c.terminal?.uuid, terminal2);
     expect(c.stage, PosStage.openSession);
+  });
+
+  test('a register opened from a shop in the App sends that shop on every request', () async {
+    final (fake, c) = controller();
+    await c.openFromApp('shop-code');
+    expect(c.account?.uuid, shopX);
+    expect(c.api.client.commerceAccountUuid, shopX);
+    expect(c.terminal?.uuid, terminal2);
+    final terminals = fake.requests.lastWhere((r) => r.url.path.endsWith('pos/terminals'));
+    expect(terminals.headers['X-Commerce-Account-UUID'], shopX);
+  });
+
+  test('an operator of several shops chooses one; the internal operation sends no account', () async {
+    final (fake, c) = controller();
+    await c.signIn('operador@example.invalid', 'secret');
+    await c.selectTenant(c.tenants.first);
+    expect(c.stage, PosStage.account);
+    expect(c.accounts.map((a) => a.name), ['INTERNAL', 'Loja X', 'Loja Y']);
+    await c.selectAccount(c.accounts[2]);
+    expect(fake.requests.last.headers['X-Commerce-Account-UUID'], shopY);
+    await c.selectTenant(c.tenants.first);
+    await c.selectAccount(c.accounts.first);
+    expect(c.api.client.commerceAccountUuid, isNull);
+    expect(fake.requests.last.headers.containsKey('X-Commerce-Account-UUID'), isFalse);
+    expect(c.stage, PosStage.terminal);
   });
 
   test('a used or expired App code shows the sign-in card', () async {

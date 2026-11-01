@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'store.dart';
 
 /// POS session of an installed app, kept in the encrypted store (never on the web, whose refresh
-/// token is an HttpOnly cookie): the rotating refresh token, the signed-in operator, the tenant
-/// and the API address. Reopening the app (online or not) resumes from it after the operator PIN.
+/// token is an HttpOnly cookie): the rotating refresh token, the signed-in operator, the tenant,
+/// the customer shop and the API address. Reopening the app (online or not) resumes from it after the operator PIN.
 ///
 /// The app and the background sync are two connections to the same store. Device requests carry a
 /// monotonic counter and a refresh token is valid once, so they never run at the same time: both
@@ -19,6 +19,7 @@ class SessionVault {
   static const _refresh = 'session.refresh';
   static const _user = 'session.user';
   static const _tenant = 'session.tenant';
+  static const _account = 'session.account';
   static const _api = 'session.api';
   static const _lease = 'sync.lease';
   static const _foreground = 'app.foreground_at';
@@ -32,6 +33,9 @@ class SessionVault {
 
   Map<String, dynamic>? get user => _json(_user);
   Map<String, dynamic>? get tenant => _json(_tenant);
+
+  /// Customer shop (commerce account) the operator sells for; null for the internal operation.
+  String? get account => store.meta(_account);
   String? get apiBase => store.meta(_api);
 
   void saveUser({required String uuid, required String name, required String email}) =>
@@ -40,12 +44,14 @@ class SessionVault {
   void saveTenant({required String uuid, required String name, String? code}) =>
       store.setMeta(_tenant, jsonEncode({'uuid': uuid, 'name': name, 'code': code}));
 
+  void saveAccount(String? uuid) => store.setMeta(_account, uuid);
+
   void saveApiBase(String base) => store.setMeta(_api, base);
 
   /// Sign-out, a refused refresh or too many wrong PINs: the stored session goes; pending sales,
   /// the device key and its grant stay for the next operator.
   void clear() {
-    for (final key in [_refresh, _user, _tenant]) {
+    for (final key in [_refresh, _user, _tenant, _account]) {
       store.setMeta(key, null);
     }
   }
