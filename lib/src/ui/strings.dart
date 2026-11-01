@@ -133,6 +133,11 @@ class S {
       'en': 'A new POS version is ready. The page will reload; do it between sales.',
       'es': 'Una nueva versión del TPV está lista. La página se recargará; hágalo entre una venta y otra.',
     },
+    'updateUnsupported': {
+      'pt': 'Esta versão do app não é mais aceita. Atualize o app pela loja ou com o administrador para continuar.',
+      'en': 'This app version is no longer supported. Update the app from the store or with your administrator to continue.',
+      'es': 'Esta versión de la app ya no es compatible. Actualice la app desde la tienda o con su administrador para continuar.',
+    },
     'updateNow': {'pt': 'Atualizar agora', 'en': 'Update now', 'es': 'Actualizar ahora'},
     'updateLater': {'pt': 'Depois', 'en': 'Later', 'es': 'Después'},
     'deviceModeHint': {

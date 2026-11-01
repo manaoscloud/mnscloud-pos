@@ -5,7 +5,9 @@ import 'app_update_controller.dart';
 
 /// Wraps the app and shows a "new version" card when a newer POS release goes live while the page
 /// stays open. It never reloads by itself and stays hidden while [busy] (a sale in progress: the
-/// cart lives in memory only and a reload would lose it).
+/// cart lives in memory only and a reload would lose it). Installed apps show only the mandatory
+/// notice (version below the minimum of their platform), without buttons: they update from the
+/// store, and offline sales keep working meanwhile.
 class AppUpdateOverlay extends StatefulWidget {
   const AppUpdateOverlay({super.key, required this.child, required this.busy, this.listenable, this.controller});
 
@@ -97,6 +99,7 @@ class _AppUpdateNotice extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final version = controller.deployed?.version;
     final critical = controller.critical;
+    final native = !controller.isWeb;
     final title = s.t(critical ? 'updateImportant' : 'updateAvailable');
 
     return Semantics(
@@ -142,23 +145,24 @@ class _AppUpdateNotice extends StatelessWidget {
                     )),
                     const SizedBox(height: 4),
                     Text(
-                      s.t('updateHelp'),
+                      s.t(native ? 'updateUnsupported' : 'updateHelp'),
                       style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant, height: 1.4),
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        if (!critical) TextButton(onPressed: controller.postpone, child: Text(s.t('updateLater'))),
-                        FilledButton.icon(
-                          onPressed: controller.reloadNow,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: Text(s.t('updateNow')),
-                        ),
-                      ],
-                    ),
+                    if (!native) const SizedBox(height: 8),
+                    if (!native)
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          if (!critical) TextButton(onPressed: controller.postpone, child: Text(s.t('updateLater'))),
+                          FilledButton.icon(
+                            onPressed: controller.reloadNow,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text(s.t('updateNow')),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
