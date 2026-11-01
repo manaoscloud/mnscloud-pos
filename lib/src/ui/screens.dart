@@ -1433,12 +1433,15 @@ class CameraScanDialog extends StatefulWidget {
 
 class _CameraScanDialogState extends State<CameraScanDialog> {
   late final MobileScannerController _scanner;
+  late final Future<void> _ready;
   bool _done = false;
 
   @override
   void initState() {
     super.initState();
-    prepareCameraScanner();
+    // On the web the reader (BarcodeDetector or the bundled zxing-wasm) is chosen before the
+    // scanner widget mounts and starts the camera.
+    _ready = prepareCameraScanner();
     _scanner = MobileScannerController(
       facing: CameraFacing.back,
       detectionSpeed: DetectionSpeed.noDuplicates,
@@ -1460,6 +1463,13 @@ class _CameraScanDialogState extends State<CameraScanDialog> {
     super.dispose();
   }
 
+  Widget _unavailable(S s) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(s.t('cameraUnavailable'), textAlign: TextAlign.center),
+        ),
+      );
+
   void _onDetect(BarcodeCapture capture) {
     if (_done) return;
     final code = capture.barcodes.map((b) => b.rawValue?.trim() ?? '').firstWhere((v) => v.isNotEmpty, orElse: () => '');
@@ -1478,15 +1488,19 @@ class _CameraScanDialogState extends State<CameraScanDialog> {
         height: 300,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: MobileScanner(
-            controller: _scanner,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(s.t('cameraUnavailable'), textAlign: TextAlign.center),
-              ),
-            ),
+          child: FutureBuilder<void>(
+            future: _ready,
+            builder: (context, ready) {
+              if (ready.hasError) return _unavailable(s);
+              if (ready.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return MobileScanner(
+                controller: _scanner,
+                onDetect: _onDetect,
+                errorBuilder: (context, error) => _unavailable(s),
+              );
+            },
           ),
         ),
       ),
