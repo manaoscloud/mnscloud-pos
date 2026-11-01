@@ -454,5 +454,28 @@ class SqliteOfflineStore implements OfflineStore {
       ];
 
   @override
+  void resetDevice() => _transaction(() {
+        _db.execute('DELETE FROM catalog');
+        _db.execute('DELETE FROM catalog_barcode');
+        _db.execute('DELETE FROM catalog_staging');
+        for (final key in deviceMetaKeys) {
+          setMeta(key, null);
+        }
+      });
+
+  /// Meta of one provisioned device ([resetDevice]).
+  static const deviceMetaKeys = [
+    'device',
+    'device_environment',
+    'grant',
+    'terminal',
+    'catalog_cursor',
+    'bootstrap_cursor',
+    'catalog_synced_at',
+    'fiscal_config',
+    'fiscal_refreshed_at',
+  ];
+
+  @override
   void close() => _db.close();
 }

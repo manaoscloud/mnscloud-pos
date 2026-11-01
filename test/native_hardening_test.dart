@@ -251,8 +251,10 @@ void main() {
   });
 
   group('background sync', () {
-    test('renews the session under the lease, stores the new token and pushes the pending sale', () async {
+    /// A provisioned store with one pending operation (cash opened offline), due now.
+    Future<SqliteOfflineStore> pending([void Function(SqliteOfflineStore store)? prepare]) async {
       final store = provisioned();
+      prepare?.call(store);
       final runtimeController = PosController(RefreshApi(), host: DeviceHost.over(store), pinIterations: 1000);
       await runtimeController.restore();
       await runtimeController.unlock('2468');
@@ -264,6 +266,11 @@ void main() {
       for (final e in store.dueOperations(DateTime.now().add(const Duration(days: 1)).millisecondsSinceEpoch)) {
         store.markOperation(e.operationUuid, 'retry', retryAtMs: 0);
       }
+      return store;
+    }
+
+    test('renews the session under the lease, stores the new token and pushes the pending sale', () async {
+      final store = await pending();
 
       final calls = <String>[];
       final client = MockClient((request) async {
@@ -289,6 +296,70 @@ void main() {
       expect(SessionVault(store).refreshToken, 'r9');
       expect(store.outboxCounts()['pending'], isNull);
       expect(store.meta('sync.lease'), isNull, reason: 'released');
+    });
+
+    test('device requests go to the device tenant and shop, whatever was chosen last', () async {
+      Future<List<Map<String, String>>> pushHeaders(String? account) async {
+        final store = await pending((store) {
+          store.setMeta('device', jsonEncode({
+            'SdvUUID': 'EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE', 'PosTerminalPtmUUID': terminalUuid, 'CommerceAccountUUID': account,
+          }));
+          store.setMeta('device_environment', 'device-tenant');
+          SessionVault(store).saveAccount('other-shop');
+        });
+        final seen = <Map<String, String>>[];
+        final client = MockClient((request) async {
+          if (request.url.path.endsWith('/pos/auth/refresh')) {
+            return http.Response(jsonEncode({'data': {'accessToken': 'a9', 'refreshToken': 'r9', 'expiresIn': 900,
+              'session': {'userUUID': operatorUuid, 'email': 'op@example.invalid'}}}), 200);
+          }
+          seen.add(request.headers);
+          if (request.url.path.endsWith('/pos/sync/push')) {
+            final entries = (jsonDecode(request.body)['operations'] as List);
+            return http.Response(jsonEncode({'data': {'results': [
+              for (final e in entries) {'operationUUID': e['operation']['operationUUID'], 'status': 'ACCEPTED'},
+            ]}}), 200);
+          }
+          return http.Response(jsonEncode({'data': {'items': [], 'cursor': 'c1', 'done': true, 'checksum': payloadHash([])}}), 200);
+        });
+        expect(await backgroundSyncOnce(store, key, httpClient: client), isNull);
+        expect(store.outboxCounts()['pending'], isNull);
+        expect(store.outboxCounts()['retry'], isNull, reason: 'pushed and accepted');
+        return seen;
+      }
+
+      final shop = await pushHeaders('shop-of-terminal');
+      expect(shop, isNotEmpty);
+      for (final headers in shop) {
+        expect(headers['x-environment-uuid'], 'device-tenant');
+        expect(headers['x-commerce-account-uuid'], 'shop-of-terminal');
+      }
+      for (final headers in await pushHeaders(null)) {
+        expect(headers['x-environment-uuid'], 'device-tenant');
+        expect(headers.containsKey('x-commerce-account-uuid'), isFalse, reason: 'internal operation sends no shop');
+      }
+    });
+
+    test('another register is not provisioned while this one has operations to push', () async {
+      final store = await pending();
+      final controller = PosController(RefreshApi(), host: DeviceHost.over(store), pinIterations: 1000);
+      await controller.restore();
+      await controller.unlock('2468');
+      expect(await controller.provisionDevice('TABLET 2'), isFalse);
+      expect(controller.error, contains('operations of another register'));
+      expect(store.meta('device'), contains('EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE'));
+      controller.dispose();
+    });
+
+    test('a new device starts without the catalog, cursor, grant or terminal of the previous one', () {
+      final store = provisioned();
+      store.setMeta('device_environment', 'device-tenant');
+      store.resetDevice();
+      expect(store.catalogCount(), 0);
+      for (final key in ['device', 'device_environment', 'grant', 'terminal', 'catalog_cursor']) {
+        expect(store.meta(key), isNull, reason: key);
+      }
+      expect(SessionVault(store).refreshToken, 'r1', reason: 'the session stays');
     });
 
     test('stays out while the app is in front or holds the lease', () async {

@@ -78,6 +78,14 @@ class S {
       'pt': 'Este operador não está autorizado a vender offline neste aparelho.',
       'es': 'Este operador no está autorizado a vender sin conexión en este dispositivo.',
     },
+    'This installation still has operations of another register to synchronize. Open that register online first': {
+      'pt': 'Este aparelho ainda tem operações de outro caixa para sincronizar. Abra aquele caixa com conexão primeiro.',
+      'es': 'Este dispositivo aún tiene operaciones de otra caja por sincronizar. Abra esa caja con conexión primero.',
+    },
+    'This shop is unavailable. Pending sales stay on the device and are sent when it is released': {
+      'pt': 'Esta loja está indisponível. As vendas pendentes ficam no aparelho e são enviadas quando ela for liberada.',
+      'es': 'Esta tienda no está disponible. Las ventas pendientes quedan en el dispositivo y se envían cuando se libere.',
+    },
     'The background sync is running; trying again shortly': {
       'pt': 'A sincronização em segundo plano está em andamento; nova tentativa em instantes.',
       'es': 'La sincronización en segundo plano está en curso; nuevo intento en instantes.',
