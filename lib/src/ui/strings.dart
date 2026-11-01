@@ -69,6 +69,19 @@ class S {
     'No active billing subscription grants this entitlement': {'pt': 'O módulo PDV não está contratado para esta empresa.', 'es': 'El módulo TPV no está contratado para esta empresa.'},
     'Commercial billing policy is missing for this resource': {'pt': 'O módulo não está disponível para contratação. Fale com o suporte.', 'es': 'El módulo no está disponible para contratación. Contacte al soporte.'},
     'Unexpected database error': {'pt': 'Erro inesperado no servidor. Tente de novo.', 'es': 'Error inesperado del servidor. Intente de nuevo.'},
+    'Too many wrong PINs. Sign in again': {'pt': 'PIN incorreto muitas vezes. Entre de novo.', 'es': 'PIN incorrecto demasiadas veces. Entre de nuevo.'},
+    'No connection, and no register of this device is enabled to sell offline. Try again when the connection returns': {
+      'pt': 'Sem conexão, e nenhum caixa deste aparelho está habilitado para vender offline. Tente de novo quando a conexão voltar.',
+      'es': 'Sin conexión, y ninguna caja de este dispositivo está habilitada para vender sin conexión. Intente de nuevo cuando vuelva la conexión.',
+    },
+    'This operator is not authorized to sell offline on this device': {
+      'pt': 'Este operador não está autorizado a vender offline neste aparelho.',
+      'es': 'Este operador no está autorizado a vender sin conexión en este dispositivo.',
+    },
+    'The background sync is running; trying again shortly': {
+      'pt': 'A sincronização em segundo plano está em andamento; nova tentativa em instantes.',
+      'es': 'La sincronización en segundo plano está en curso; nuevo intento en instantes.',
+    },
   };
 
   static const Map<String, Map<String, String>> _strings = {
@@ -280,5 +293,27 @@ class S {
       'en': 'A sale is still being confirmed. Wait for it before signing out.',
       'es': 'Una venta aún se está confirmando. Espere la confirmación antes de salir.',
     },
+    // Operator PIN of installed apps (local unlock, never a sign-in).
+    'pinCreateTitle': {'pt': 'Crie seu PIN de operador', 'en': 'Create your operator PIN', 'es': 'Crea tu PIN de operador'},
+    'pinCreateHelp': {
+      'pt': 'O PIN abre este caixa depois que o app for fechado ou ficar em segundo plano, mesmo sem internet. Ele fica só neste aparelho.',
+      'en': 'The PIN opens this register after the app is closed or stays in the background, even without internet. It stays on this device only.',
+      'es': 'El PIN abre esta caja después de cerrar la app o dejarla en segundo plano, incluso sin internet. Queda solo en este dispositivo.',
+    },
+    'pinNew': {'pt': 'Novo PIN (4 a 8 números)', 'en': 'New PIN (4 to 8 digits)', 'es': 'Nuevo PIN (4 a 8 números)'},
+    'pinConfirm': {'pt': 'Repita o PIN', 'en': 'Repeat the PIN', 'es': 'Repite el PIN'},
+    'pinSave': {'pt': 'Salvar PIN', 'en': 'Save PIN', 'es': 'Guardar PIN'},
+    'pinInvalid': {'pt': 'Use de 4 a 8 números.', 'en': 'Use 4 to 8 digits.', 'es': 'Usa de 4 a 8 números.'},
+    'pinMismatch': {'pt': 'Os PINs não conferem.', 'en': 'The PINs do not match.', 'es': 'Los PIN no coinciden.'},
+    'pinUnlockTitle': {'pt': 'Caixa bloqueado', 'en': 'Register locked', 'es': 'Caja bloqueada'},
+    'pinUnlockHelp': {
+      'pt': 'Digite o PIN do operador para continuar.',
+      'en': 'Enter the operator PIN to continue.',
+      'es': 'Escribe el PIN del operador para continuar.',
+    },
+    'pin': {'pt': 'PIN', 'en': 'PIN', 'es': 'PIN'},
+    'pinUnlock': {'pt': 'Desbloquear', 'en': 'Unlock', 'es': 'Desbloquear'},
+    'pinWrong': {'pt': 'PIN incorreto. Tentativas restantes:', 'en': 'Wrong PIN. Attempts left:', 'es': 'PIN incorrecto. Intentos restantes:'},
+    'lockNow': {'pt': 'Bloquear caixa', 'en': 'Lock register', 'es': 'Bloquear caja'},
   };
 }

@@ -12,6 +12,7 @@ import '../platform/session.dart';
 import '../state/pos_controller.dart';
 import 'access_shell.dart';
 import 'install_app_button.dart';
+import 'pin_screens.dart';
 import 'strings.dart';
 
 String fmt(Decimal value) => value.format();
@@ -34,6 +35,9 @@ class PosHome extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
+          // Installed apps: the operator PIN comes before any register screen.
+          if (controller.locked) return _accessScaffold(context, LockView(controller: controller));
+          if (controller.needsPin) return _accessScaffold(context, PinSetupView(controller: controller));
           final body = switch (controller.stage) {
             PosStage.signIn => SignInView(controller: controller),
             PosStage.tenant => TenantView(controller: controller),
@@ -127,6 +131,13 @@ class PosStatusBar extends StatelessWidget implements PreferredSizeWidget {
             onPressed: () => showDialog(context: context, builder: (_) => RegisterDialog(controller: controller)),
           ),
         const InstallAppButton(),
+        if (controller.pin != null && controller.user != null && controller.pin!.isSetFor(controller.user!.uuid))
+          IconButton(
+            key: const Key('lockNow'),
+            tooltip: s.t('lockNow'),
+            icon: const Icon(Icons.lock_outline),
+            onPressed: controller.saleInDoubt ? null : controller.lockNow,
+          ),
         IconButton(
           key: const Key('signOut'),
           tooltip: s.t('signOut'),

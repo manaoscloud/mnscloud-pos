@@ -184,11 +184,15 @@ class DeviceRuntime {
   // ---------- Sales
 
   /// Validates the offline limits; the server checks again when the sale arrives.
-  void checkLimits(Map<String, dynamic> sale, Decimal total, List<CartLine> cart) {
+  void checkLimits(Map<String, dynamic> sale, Decimal total, List<CartLine> cart, {String? operator}) {
     final g = grant;
     final now = _clock();
     if (g == null || !g.validAt(now)) {
       throw OfflineLimitException('This device has no valid offline authorization. Connect to sync it.');
+    }
+    // The grant names who may sell offline; an empty list leaves it to the terminal permissions.
+    if (operator != null && g.operators.isNotEmpty && !g.operators.contains(normalizeUuid(operator))) {
+      throw OfflineLimitException('This operator is not authorized to sell offline on this device.');
     }
     if (total > g.maxSaleValue) {
       throw OfflineLimitException('The sale is above the offline limit of this device.');
@@ -206,7 +210,7 @@ class DeviceRuntime {
   Map<String, dynamic> recordSale(String operator, Map<String, dynamic> base, Decimal total, Decimal cashNet,
       List<CartLine> cart) {
     final sale = {...base, 'origin': 'device'};
-    checkLimits(sale, total, cart);
+    checkLimits(sale, total, cart, operator: operator);
     final sessionUuid = sale['sessionUUID'] as String;
     final operation = _operation(
       'pos.sale.submit',
