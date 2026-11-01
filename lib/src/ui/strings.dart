@@ -111,16 +111,10 @@ class S {
     'language': {'pt': 'Idioma', 'en': 'Language', 'es': 'Idioma'},
     'systemLanguage': {'pt': 'Idioma do sistema', 'en': 'System language', 'es': 'Idioma del sistema'},
     'privacy': {'pt': 'Privacidade', 'en': 'Privacy', 'es': 'Privacidad'},
+    'internalOperation': {'pt': 'Operação própria', 'en': 'Own operation', 'es': 'Operación propia'},
     'terms': {'pt': 'Termos de uso', 'en': 'Terms of use', 'es': 'Términos de uso'},
     'signedInAs': {'pt': 'Conectado como', 'en': 'Signed in as', 'es': 'Conectado como'},
-    'chooseAccount': {'pt': 'Escolha a loja', 'en': 'Choose the shop', 'es': 'Elija la tienda'},
-    'chooseAccountHint': {
-      'pt': 'Selecione a operação própria ou a loja de cliente em que você vai vender.',
-      'en': 'Select your own operation or the customer shop you will sell for.',
-      'es': 'Seleccione la operación propia o la tienda de cliente para la que va a vender.',
-    },
     'customerShop': {'pt': 'Loja de cliente', 'en': 'Customer shop', 'es': 'Tienda de cliente'},
-    'internalOperation': {'pt': 'Operação própria', 'en': 'Own operation', 'es': 'Operación propia'},
     'chooseTenantHint': {
       'pt': 'Selecione a empresa em que você vai vender.',
       'en': 'Select the company you will sell for.',
@@ -170,6 +164,8 @@ class S {
     'email': {'pt': 'E-mail', 'en': 'E-mail', 'es': 'Correo'},
     'password': {'pt': 'Senha', 'en': 'Password', 'es': 'Contraseña'},
     'chooseTenant': {'pt': 'Escolha a empresa', 'en': 'Choose the company', 'es': 'Elija la empresa'},
+    'chooseAccount': {'pt': 'Escolha a loja', 'en': 'Choose the shop', 'es': 'Elija la tienda'},
+    'chooseAccountHint': {'pt': 'Operação própria ou loja de cliente em que você vai vender.', 'en': 'Your own operation or the customer shop you will sell for.', 'es': 'Operación propia o tienda de cliente para la que va a vender.'},
     'chooseTerminal': {'pt': 'Escolha o caixa', 'en': 'Choose the register', 'es': 'Elija la caja'},
     'noTerminals': {
       'pt': 'Nenhum caixa ativo. Cadastre um em PDV › Terminais no MNSCloud.',
