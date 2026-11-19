@@ -3,6 +3,8 @@
 | Capability | Web (online) | Installed apps |
 | --- | --- | --- |
 | Sign in with the MNSCloud user, choose environment and terminal | yes | yes |
+| Customer shop of a reseller (commerce account): only that shop's terminals, catalog, buyers and Pix gateway; revoked operator or suspended shop closes it at the next request | yes | yes; a suspended shop still drains the sales already made offline (conflict `ACCOUNT_SUSPENDED`) |
+| Open from the customer Portal (section Caixa): single-use 60 s code in the URL fragment, session of the App operator linked to the Portal login | yes | no (the Portal opens the web POS) |
 | Open, supply, withdraw and close the cash session | yes | yes |
 | Catalog search and barcode lookup with the terminal price | yes | yes |
 | Barcode with the camera | yes: the browser's BarcodeDetector, or the bundled zxing-wasm reader (Firefox, Safari, desktop Chrome), served by the POS itself | Android, iOS and macOS; Windows and Linux use a USB/Bluetooth reader |
